@@ -1,0 +1,15 @@
+{
+  "name": "tank-bear",
+  "private": true,
+  "workspaces": ["backend"],
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "dev": "npm run dev --workspace backend",
+    "test": "npm test --workspace backend",
+    "test:runtime": "npm run test:runtime --workspace backend",
+    "demo:economics": "npm run demo:economics --workspace backend",
+    "typecheck": "npm run typecheck --workspace backend",
+    "build": "npm run build --workspace backend",
+    "check": "npm run typecheck && npm test && npm run build"
+  }
+}

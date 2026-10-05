@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Tank Bear</string>
+    <string name="tagline">Smarter stops. Less wasted fuel.</string>
+    <string name="find">Find</string>
+    <string name="car">Car</string>
+    <string name="settings">Settings</string>
+    <string name="journey_title">Make your fuel stop count</string>
+    <string name="journey_body">Compare pump prices with the extra driving needed to reach each station.</string>
+    <string name="journey_status">Journey comparisons are coming soon. Fuel prices and routes are not connected yet.</string>
+    <string name="car_title">Your car, your fuel costs</string>
+    <string name="car_body">Use your car’s fuel type and Imperial MPG to estimate what a detour costs.</string>
+    <string name="car_status">Manual vehicle setup is coming soon. No vehicle has been saved.</string>
+    <string name="settings_title">You’re in control</string>
+    <string name="settings_body">No account needed. Tank Bear will ask before using your location.</string>
+    <string name="settings_status">This early version does not collect location or make network requests.</string>
+</resources>

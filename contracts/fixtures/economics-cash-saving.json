@@ -1,0 +1,68 @@
+{
+  "description": "Synthetic exact-arithmetic fixture: 150p pump saving minus 80p detour fuel cost. The MPG is chosen to make consumption exactly one litre per mile; these are not live routes or vehicle estimates.",
+  "input": {
+    "mode": "along_journey",
+    "origin": { "lat": 51.45, "lon": -0.97 },
+    "destination": { "lat": 51.46, "lon": -0.96 },
+    "fuelType": "E10",
+    "mpgImperial": "4.54609",
+    "litresToBuy": "30",
+    "routingContextId": "synthetic-auto-v1",
+    "now": "2026-10-05T12:00:00Z",
+    "maxObservationAgeSeconds": 900,
+    "baselineRoute": {
+      "distanceMetres": "10000",
+      "durationSeconds": "1000",
+      "contextId": "synthetic-auto-v1",
+      "usesFerry": false,
+      "usesToll": false
+    },
+    "candidates": [
+      {
+        "stationId": "reference",
+        "name": "Reference fixture",
+        "coordinates": { "lat": 51.455, "lon": -0.965 },
+        "price": {
+          "fuelType": "E10",
+          "pencePerLitre": "170",
+          "source": "Synthetic fixture",
+          "sourceUpdatedAt": "2026-10-05T11:45:00Z",
+          "fetchedAt": "2026-10-05T11:55:00Z"
+        },
+        "route": {
+          "distanceMetres": "10000",
+          "durationSeconds": "1000",
+          "contextId": "synthetic-auto-v1",
+          "usesFerry": false,
+          "usesToll": false
+        }
+      },
+      {
+        "stationId": "cheaper",
+        "name": "Cheaper fixture",
+        "coordinates": { "lat": 51.456, "lon": -0.967 },
+        "price": {
+          "fuelType": "E10",
+          "pencePerLitre": "165",
+          "source": "Synthetic fixture",
+          "sourceUpdatedAt": "2026-10-05T11:45:00Z",
+          "fetchedAt": "2026-10-05T11:55:00Z"
+        },
+        "route": {
+          "distanceMetres": "10780.288",
+          "durationSeconds": "1060",
+          "contextId": "synthetic-auto-v1",
+          "usesFerry": false,
+          "usesToll": false
+        }
+      }
+    ]
+  },
+  "expected": {
+    "order": ["cheaper", "reference"],
+    "stationId": "cheaper",
+    "pumpSavingPence": 150,
+    "detourFuelCostPence": 80,
+    "trueSavingPence": 70
+  }
+}

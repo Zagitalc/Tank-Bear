@@ -1,0 +1,103 @@
+{
+  "description": "Synthetic route totals and prices, not live station data. A 41.2-mile baseline becomes 42.0 miles via the near-route station or 48.4 miles via the cheapest pump. At 45 Imperial MPG and a 30-litre fill, the near-route station costs less overall.",
+  "input": {
+    "mode": "along_journey",
+    "origin": {
+      "lat": 51.45,
+      "lon": -0.97
+    },
+    "destination": {
+      "lat": 51.46,
+      "lon": -0.96
+    },
+    "fuelType": "E10",
+    "mpgImperial": "45",
+    "litresToBuy": "30",
+    "routingContextId": "synthetic-auto-v1",
+    "now": "2026-10-05T12:00:00Z",
+    "maxObservationAgeSeconds": 900,
+    "baselineRoute": {
+      "distanceMetres": "66304.9728",
+      "durationSeconds": "3600",
+      "contextId": "synthetic-auto-v1",
+      "usesFerry": false,
+      "usesToll": false
+    },
+    "candidates": [
+      {
+        "stationId": "reference",
+        "name": "Reference fixture",
+        "coordinates": {
+          "lat": 51.455,
+          "lon": -0.965
+        },
+        "price": {
+          "fuelType": "E10",
+          "pencePerLitre": "180",
+          "source": "Synthetic fixture",
+          "sourceUpdatedAt": "2026-10-05T11:45:00Z",
+          "fetchedAt": "2026-10-05T11:55:00Z"
+        },
+        "route": {
+          "distanceMetres": "66304.9728",
+          "durationSeconds": "3600",
+          "contextId": "synthetic-auto-v1",
+          "usesFerry": false,
+          "usesToll": false
+        }
+      },
+      {
+        "stationId": "near-route",
+        "name": "Near-route fixture",
+        "coordinates": {
+          "lat": 51.455,
+          "lon": -0.965
+        },
+        "price": {
+          "fuelType": "E10",
+          "pencePerLitre": "169.9",
+          "source": "Synthetic fixture",
+          "sourceUpdatedAt": "2026-10-05T11:45:00Z",
+          "fetchedAt": "2026-10-05T11:55:00Z"
+        },
+        "route": {
+          "distanceMetres": "67592.448",
+          "durationSeconds": "3780",
+          "contextId": "synthetic-auto-v1",
+          "usesFerry": false,
+          "usesToll": false
+        }
+      },
+      {
+        "stationId": "cheap-pump",
+        "name": "Cheapest-pump fixture",
+        "coordinates": {
+          "lat": 51.455,
+          "lon": -0.965
+        },
+        "price": {
+          "fuelType": "E10",
+          "pencePerLitre": "166.9",
+          "source": "Synthetic fixture",
+          "sourceUpdatedAt": "2026-10-05T11:45:00Z",
+          "fetchedAt": "2026-10-05T11:55:00Z"
+        },
+        "route": {
+          "distanceMetres": "77892.2496",
+          "durationSeconds": "4500",
+          "contextId": "synthetic-auto-v1",
+          "usesFerry": false,
+          "usesToll": false
+        }
+      }
+    ]
+  },
+  "expected": {
+    "bestOverallStationId": "near-route",
+    "cheapestPumpStationId": "cheap-pump",
+    "smallestDetourStationId": "reference",
+    "nearRouteComparisonCostPence": 5111,
+    "cheapestPumpComparisonCostPence": 5128,
+    "cheapestPumpWorseThanBestPence": 18
+  }
+}

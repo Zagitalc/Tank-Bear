@@ -1,0 +1,11 @@
+{
+  "service": "tank-bear",
+  "status": "ok",
+  "stage": "skeleton",
+  "optimisationAvailable": false,
+  "dependencies": {
+    "database": "ok",
+    "fuelData": "not_configured",
+    "routing": "not_configured"
+  }
+}

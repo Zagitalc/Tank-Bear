@@ -1,0 +1,2 @@
+# Stage 1 requires no secrets. Do not put credentials in wrangler.jsonc.
+# Fuel Finder and routing configuration will be added only with verified adapters.

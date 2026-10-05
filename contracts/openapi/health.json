@@ -1,0 +1,61 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tank Bear API",
+    "version": "0.1.0",
+    "description": "Stage 1 health contract only. Optimisation is not implemented."
+  },
+  "servers": [{ "url": "http://127.0.0.1:8787", "description": "Local development only" }],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Check backend and database availability",
+        "description": "Responses are Cache-Control: no-store. A healthy skeleton is not an operational fuel optimiser.",
+        "responses": {
+          "200": {
+            "description": "Database available; optimisation remains unavailable in Stage 1.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+          },
+          "503": {
+            "description": "Database unavailable; no provider error details are exposed.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" } } }
+          }
+        }
+      },
+      "head": {
+        "operationId": "headHealth",
+        "summary": "Return the GET readiness status without a body",
+        "responses": {
+          "200": { "description": "Database available. Cache-Control: no-store." },
+          "503": { "description": "Database unavailable. Cache-Control: no-store." }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Health": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["service", "status", "stage", "optimisationAvailable", "dependencies"],
+        "properties": {
+          "service": { "const": "tank-bear" },
+          "status": { "enum": ["ok", "degraded"] },
+          "stage": { "const": "skeleton" },
+          "optimisationAvailable": { "const": false },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["database", "fuelData", "routing"],
+            "properties": {
+              "database": { "enum": ["ok", "unavailable"] },
+              "fuelData": { "const": "not_configured" },
+              "routing": { "const": "not_configured" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

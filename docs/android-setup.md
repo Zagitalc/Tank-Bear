@@ -1,0 +1,53 @@
+# Android setup
+
+Open `apps/android` in Android Studio and allow Gradle sync.
+
+## Pinned local toolchain
+
+- Gradle 8.11.1, including checked-in wrapper scripts/JAR and distribution SHA256.
+- Android Gradle Plugin 8.7.3; Kotlin/Compose compiler plugin 2.1.0.
+- Compose BOM 2024.12.01 and Activity Compose 1.9.3.
+- AndroidX Test runner 1.7.0, JUnit extension 1.3.0 and Espresso 3.7.0.
+- Compile/target SDK 35, minimum SDK 26, Build Tools 34.0.0.
+- JDK 17 or 21 (verified locally with Android Studio's JBR 21).
+
+This is a compatible installed baseline for a local skeleton, not the latest
+SDK claim. Revisit target SDK/toolchain before store distribution.
+[AGP compatibility](https://developer.android.com/build/releases/agp-8-7-0-release-notes).
+
+Set `ANDROID_HOME` to the SDK installation or let Android Studio generate
+ignored `local.properties` containing `sdk.dir=/absolute/path/to/sdk`.
+On this Mac the SDK is under `$HOME/Library/Android/sdk`.
+
+```sh
+cd apps/android
+./gradlew :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
+```
+
+Output APK: `app/build/outputs/apk/debug/app-debug.apk`.
+Lint report: `app/build/reports/lint-results-debug.html`.
+
+To run, select a device in Android Studio and press Run. Or start an emulator,
+then use:
+
+```sh
+./gradlew :app:installDebug
+adb shell am start -n uk.tankbear.app/.MainActivity
+./gradlew :app:connectedDebugAndroidTest
+```
+
+The instrumentation test visits each tab and verifies selection survives
+activity recreation. Test reports live in `app/build/reports/androidTests`.
+Espresso is pinned explicitly because the older transitive version uses removed
+InputManager reflection on the installed API 37 emulator; see the
+[AndroidX Test release notes](https://developer.android.com/jetpack/androidx/releases/test#espresso-3.7.0).
+No Android JVM domain tests exist yet because Stage 1 has no domain behaviour.
+
+The app currently displays honest early-version states in Find, Car and
+Settings. It has light/dark Material themes, scrollable text and labelled
+navigation. No location permission, HTTP client, map dependency or vehicle
+storage is added until the corresponding stage.
+
+The wrapper files are standard Gradle 8.11.1 distribution files, licensed under
+Apache-2.0. The JAR SHA256 was checked against Gradle's published checksum:
+`2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046`.

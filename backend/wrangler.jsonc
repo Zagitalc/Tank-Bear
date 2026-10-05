@@ -1,0 +1,18 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "tank-bear-local",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "send_metrics": false,
+  "workers_dev": false,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tank-bear-local",
+      // Placeholder for local emulation only. No remote database has been created.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@tank-bear/backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "test:runtime": "node --test tests/*.runtime.mjs",
+    "demo:economics": "node scripts/economics-demo.ts",
+    "build": "esbuild src/index.ts src/domain/economics.ts --bundle --format=esm --platform=neutral --target=es2022 --outbase=src --outdir=dist"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260905.1",
+    "@types/node": "24.10.1",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "wrangler": "4.132.0"
+  }
+}
