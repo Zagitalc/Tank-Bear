@@ -5,7 +5,7 @@ enum class FuelType(val api: String, val label: String) {
     B7("B7", "Diesel (standard)"),
 }
 
-enum class Mode(val api: String) { AlongJourney("along_journey"), FuelTrip("fuel_trip") }
+enum class Mode(val api: String) { AlongJourney("along_journey"), FuelTrip("fuel_trip"), Nearby("nearby") }
 
 data class LatLon(val lat: Double, val lon: Double)
 
@@ -17,6 +17,35 @@ data class JourneyRequest(
     val mpgImperial: String,
     val litresToBuy: String,
 )
+
+/** Usual-hours opening status from the backend. Bank holidays are not applied. */
+data class OpeningInfo(
+    val state: String,
+    val is24Hours: Boolean = false,
+    val closesAt: String? = null,
+    val opensAt: String? = null,
+    val closesInMinutes: Int? = null,
+) {
+    companion object { val UNKNOWN = OpeningInfo("unknown") }
+}
+
+data class NearbyFill(val pencePerLitre: String, val priceLastUpdated: String, val fillCostPence: Long)
+
+data class NearbyStation(
+    val id: String,
+    val name: String,
+    val brand: String?,
+    val position: LatLon,
+    val distanceMetres: Int,
+    val temporaryClosure: Boolean,
+    val opening: OpeningInfo,
+    /** Null when the station has no price for the chosen grade. */
+    val fill: NearbyFill?,
+)
+
+data class NearbyResult(val feedLastSuccessfulRefresh: String?, val stations: List<NearbyStation>)
+
+data class SavedPlace(val name: String, val point: LatLon)
 
 data class Candidate(
     val stationId: String,
@@ -37,6 +66,7 @@ data class Candidate(
     val position: LatLon,
     /** Encoded polyline (6 digits) of the whole origin-station-destination route. */
     val routeGeometry: String,
+    val opening: OpeningInfo,
 )
 
 data class JourneyResult(
@@ -44,6 +74,7 @@ data class JourneyResult(
     val scope: String,
     val stationsInSearchArea: Int,
     val stationsRouted: Int,
+    val closedNowExcluded: Int,
     val partial: Boolean,
     val feedLastSuccessfulRefresh: String,
     val referenceStationId: String?,
@@ -59,5 +90,6 @@ enum class FailureKind { Network, Unauthorised, RateLimited, NoRoute, NoData, In
 
 sealed interface ApiOutcome {
     data class Ok(val result: JourneyResult) : ApiOutcome
+    data class NearbyOk(val result: NearbyResult) : ApiOutcome
     data class Failure(val kind: FailureKind, val message: String, val retryAfterSeconds: Int? = null) : ApiOutcome
 }

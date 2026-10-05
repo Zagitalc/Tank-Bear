@@ -1,4 +1,5 @@
 import type { FuelType } from "../domain/types.ts";
+import type { DayHours, WeekHours } from "../opening/status.ts";
 
 /** Feed fuel codes observed on 5 October 2026. Unknown codes are quarantined. */
 export const FEED_FUEL_TYPES = ["E10", "E5", "B7_STANDARD", "B7_PREMIUM", "HVO", "B10"] as const;
@@ -22,6 +23,8 @@ export interface Station {
   permanentClosure: boolean;
   isMotorway: boolean;
   isSupermarket: boolean;
+  /** Usual weekly hours, or null if absent or unreadable (never a reason to quarantine a station). */
+  openingHours: WeekHours | null;
 }
 
 export interface FuelPrice {
@@ -71,6 +74,21 @@ function optionalString(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
 }
 
+const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+
+function readHours(raw: unknown): WeekHours | null {
+  const days = (raw as { usual_days?: Record<string, unknown> } | null)?.usual_days;
+  if (!isObj(days)) return null;
+  const week: DayHours[] = [];
+  for (const key of DAY_KEYS) {
+    const d = days[key];
+    if (!isObj(d) || typeof d.open !== "string" || typeof d.close !== "string") return null;
+    if (!/^\d{2}:\d{2}(?::\d{2})?$/.test(d.open) || !/^\d{2}:\d{2}(?::\d{2})?$/.test(d.close)) return null;
+    week.push({ open: d.open.slice(0, 5), close: d.close.slice(0, 5), is24Hours: d.is_24_hours === true });
+  }
+  return week;
+}
+
 function normaliseStation(raw: unknown): Station | string {
   if (!isObj(raw)) return "record is not an object";
   if (!isNodeId(raw.node_id)) return "missing or malformed node_id";
@@ -93,6 +111,7 @@ function normaliseStation(raw: unknown): Station | string {
     permanentClosure: flag(raw.permanent_closure),
     isMotorway: flag(raw.is_motorway_service_station),
     isSupermarket: flag(raw.is_supermarket_service_station),
+    openingHours: readHours(raw.opening_times),
   };
 }
 

@@ -22,9 +22,9 @@ function seed(opts: { lastSuccess?: string | null } = {}) {
   const lastSuccess = opts.lastSuccess === undefined ? "2026-10-05T11:50:00.000Z" : opts.lastSuccess;
   if (lastSuccess) sql.exec(`INSERT INTO ingestion_state (feed, last_success_at, last_status) VALUES ('fuel-finder-national', '${lastSuccess}', 'complete')`);
   let n = 0;
-  const add = (name: string, at: Coordinates, pence: string, o: { fuel?: string; temp?: boolean; perm?: boolean } = {}) => {
+  const add = (name: string, at: Coordinates, pence: string, o: { fuel?: string; temp?: boolean; perm?: boolean; hours?: string } = {}) => {
     const id = `st${++n}-${name}`;
-    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, name, "Brand", "RG1", at.lat, at.lon, o.temp ? 1 : 0, o.perm ? 1 : 0, 0, 0, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z");
+    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, name, "Brand", "RG1", at.lat, at.lon, o.temp ? 1 : 0, o.perm ? 1 : 0, 0, 0, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", o.hours ?? null);
     sql.prepare(`INSERT INTO current_prices VALUES (?,?,?,?,?,?)`).run(id, o.fuel ?? "E10", pence, "2026-10-05T08:00:00.000Z", "2026-10-05T08:00:00.000Z", "2026-10-05T08:00:00.000Z");
     return id;
   };

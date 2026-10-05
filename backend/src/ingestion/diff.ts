@@ -37,7 +37,8 @@ export interface RefreshDiff {
 const sameStation = (a: Station, b: Station) =>
   a.tradingName === b.tradingName && a.brandName === b.brandName && a.postcode === b.postcode &&
   a.latitude === b.latitude && a.longitude === b.longitude && a.temporaryClosure === b.temporaryClosure &&
-  a.permanentClosure === b.permanentClosure && a.isMotorway === b.isMotorway && a.isSupermarket === b.isSupermarket;
+  a.permanentClosure === b.permanentClosure && a.isMotorway === b.isMotorway && a.isSupermarket === b.isSupermarket &&
+  JSON.stringify(a.openingHours) === JSON.stringify(b.openingHours);
 
 /**
  * Compares a complete, validated refresh with stored state and returns only the rows that

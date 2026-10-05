@@ -5,6 +5,7 @@
   "scope": "Best among the stations checked.",
   "coverage": {
     "stationsInSearchArea": 3,
+    "closedNowExcluded": 0,
     "stationsRouted": 3,
     "routingCalls": 4,
     "partial": false,
@@ -84,7 +85,11 @@
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
       "routeGeometry": "_hgcaB~oez@_cgI~lpG_y`G~lpG",
-      "stationSnapMetres": 3
+      "stationSnapMetres": 3,
+      "opening": {
+        "state": "unknown",
+        "basis": "usual_hours"
+      }
     },
     {
       "stationId": "station-c",
@@ -131,7 +136,13 @@
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
       "routeGeometry": "_hgcaB~oez@__|B~jlB_}kM~ntL",
-      "stationSnapMetres": 3
+      "stationSnapMetres": 3,
+      "opening": {
+        "state": "open",
+        "basis": "usual_hours",
+        "closesAt": "22:00",
+        "closesInMinutes": 540
+      }
     },
     {
       "stationId": "station-a",
@@ -178,7 +189,13 @@
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
       "routeGeometry": "_hgcaB~oez@_~cH~lpG_~cH~lpG",
-      "stationSnapMetres": 3
+      "stationSnapMetres": 3,
+      "opening": {
+        "state": "open",
+        "basis": "usual_hours",
+        "closesAt": "22:00",
+        "closesInMinutes": 540
+      }
     }
   ],
   "excluded": []

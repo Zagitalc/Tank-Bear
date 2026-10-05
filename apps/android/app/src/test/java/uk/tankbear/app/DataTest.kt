@@ -15,6 +15,8 @@ import uk.tankbear.app.data.JourneyRequest
 import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.Mode
 import uk.tankbear.app.data.OptimiseClient
+import uk.tankbear.app.data.OpeningInfo
+import uk.tankbear.app.data.Places
 import uk.tankbear.app.data.Polyline
 import uk.tankbear.app.data.ResultParser
 import uk.tankbear.app.data.Validation
@@ -114,5 +116,57 @@ class DataTest {
         assertTrue(Polyline.decode("").isEmpty())
         assertTrue(Polyline.decode("~").isEmpty())
         assertTrue(Polyline.decode("a b").isEmpty())
+    }
+
+    private val nearbySample = javaClass.classLoader!!.getResource("nearby-response-sample.json")!!.readText()
+
+    @Test fun parsesNearbyFixtureIncludingMissingPriceAndClosure() {
+        val r = ResultParser.parseNearby(nearbySample)
+        assertEquals(4, r.stations.size)
+        val open = r.stations.first { it.id == "near-open" }
+        assertEquals(4197L, open.fill!!.fillCostPence)
+        assertEquals("open", open.opening.state)
+        val closed = r.stations.first { it.id == "near-closed" }
+        assertEquals("closed", closed.opening.state)
+        assertEquals("06:00", closed.opening.opensAt)
+        assertEquals("unknown", r.stations.first { it.id == "near-unknown" }.opening.state)
+        val noPrice = r.stations.first { it.id == "near-noprice" }
+        assertNull(noPrice.fill)
+        assertTrue(noPrice.temporaryClosure)
+    }
+
+    @Test fun optimiseFixtureCarriesOpeningStatus() {
+        val r = ResultParser.parse(sample)
+        assertTrue(r.candidates.any { it.opening.state == "open" })
+        assertTrue(r.candidates.any { it.opening.state == "unknown" })
+    }
+
+    @Test fun openingTextIsPlainAndHonest() {
+        assertEquals("Open 24 hours", Formatting.opening(OpeningInfo("open", is24Hours = true)))
+        assertEquals("Open until 22:00", Formatting.opening(OpeningInfo("open", closesAt = "22:00", closesInMinutes = 300)))
+        assertEquals("Closes in 20 min", Formatting.opening(OpeningInfo("open", closesAt = "13:20", closesInMinutes = 20)))
+        assertEquals("Closed now, opens 06:00", Formatting.opening(OpeningInfo("closed", opensAt = "06:00")))
+        assertEquals("Closed now", Formatting.opening(OpeningInfo("closed")))
+        assertEquals("Opening hours unknown", Formatting.opening(OpeningInfo.UNKNOWN))
+        assertEquals("Opening hours unknown", Formatting.opening(OpeningInfo("something-new")))
+    }
+
+    @Test fun savedPlacesRoundTripAndAreBounded() {
+        val a = Places.add(emptyList(), " Home ", LatLon(51.45, -0.97))!!
+        assertEquals("Home", a.single().name)
+        val replaced = Places.add(a, "home", LatLon(51.5, -1.0))!!
+        assertEquals(1, replaced.size)
+        assertEquals(51.5, replaced.single().point.lat, 1e-9)
+        assertNull(Places.add(a, "  ", LatLon(51.0, -1.0)))
+        var full = emptyList<uk.tankbear.app.data.SavedPlace>()
+        repeat(Places.MAX) { full = Places.add(full, "P$it", LatLon(51.0 + it / 100.0, -1.0))!! }
+        assertNull(Places.add(full, "One too many", LatLon(52.0, -1.0)))
+        assertEquals(full, Places.decode(Places.encode(full)))
+    }
+
+    @Test fun corruptOrOutOfRangeSavedPlacesAreDroppedNotCrashes() {
+        assertTrue(Places.decode("not json").isEmpty())
+        assertTrue(Places.decode("[{\"n\":\"x\",\"lat\":0,\"lon\":0}]").isEmpty())
+        assertTrue(Places.decode("[{\"n\":\"\",\"lat\":51.4,\"lon\":-1.0}]").isEmpty())
     }
 }

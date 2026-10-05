@@ -51,6 +51,19 @@ object Formatting {
         }
     }
 
+    /** Plain wording for usual opening hours; says so when it cannot tell. */
+    fun opening(o: OpeningInfo): String = when {
+        o.state == "open" && o.is24Hours -> "Open 24 hours"
+        o.state == "open" && o.closesInMinutes != null && o.closesInMinutes <= 30 -> "Closes in ${o.closesInMinutes} min"
+        o.state == "open" && o.closesAt != null -> "Open until ${o.closesAt}"
+        o.state == "open" -> "Open now"
+        o.state == "closed" && o.opensAt != null -> "Closed now, opens ${o.opensAt}"
+        o.state == "closed" -> "Closed now"
+        else -> "Opening hours unknown"
+    }
+
+    fun metresAsMiles(metres: Int): String = miles(metres.toString())
+
     const val SMALL_DIFFERENCE_PENCE = 20L
     fun isSmallDifference(trueSavingPence: Long) = abs(trueSavingPence) < SMALL_DIFFERENCE_PENCE
 }

@@ -13,6 +13,9 @@ import uk.tankbear.app.data.FuelType
 import uk.tankbear.app.data.JourneyRequest
 import uk.tankbear.app.data.JourneyResult
 import uk.tankbear.app.data.LatLon
+import uk.tankbear.app.data.NearbyResult
+import uk.tankbear.app.data.Places
+import uk.tankbear.app.data.SavedPlace
 import uk.tankbear.app.data.Mode
 import uk.tankbear.app.data.OptimiseClient
 import uk.tankbear.app.data.Prefs
@@ -27,6 +30,15 @@ sealed interface SearchState {
     data class Done(val outcome: ApiOutcome.Ok, val at: java.time.Instant) : SearchState
     data class Failed(val failure: ApiOutcome.Failure) : SearchState
 }
+
+sealed interface NearbyState {
+    data object Idle : NearbyState
+    data object Loading : NearbyState
+    data class Done(val result: NearbyResult, val at: java.time.Instant) : NearbyState
+    data class Failed(val failure: ApiOutcome.Failure) : NearbyState
+}
+
+enum class NearbySort { Closest, Cheapest }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
@@ -47,6 +59,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     private var job: Job? = null
 
+    var nearby by mutableStateOf<NearbyState>(NearbyState.Idle)
+        private set
+    var nearbySort by mutableStateOf(NearbySort.Closest)
+    var locationMessage by mutableStateOf<String?>(null)
+    var placeMessage by mutableStateOf<String?>(null)
+        private set
+
     /** What a long-press on the map sets. */
     var mapTarget by mutableStateOf(MapTarget.Start)
     var selectedStationId by mutableStateOf<String?>(null)
@@ -60,7 +79,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setFromMap(point: LatLon) {
         val lat = "%.5f".format(java.util.Locale.UK, point.lat)
         val lon = "%.5f".format(java.util.Locale.UK, point.lon)
-        if (mapTarget == MapTarget.Start || mode == Mode.FuelTrip) { originLat = lat; originLon = lon } else { destLat = lat; destLon = lon }
+        if (mapTarget == MapTarget.Start || mode != Mode.AlongJourney) { originLat = lat; originLon = lon } else { destLat = lat; destLon = lon }
     }
 
     fun selectStation(id: String) { selectedStationId = id }
@@ -82,8 +101,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         destLat = "51.7520"; destLon = "-1.2577"
     }
 
+    fun useLocation(point: LatLon) {
+        originLat = "%.5f".format(java.util.Locale.UK, point.lat)
+        originLon = "%.5f".format(java.util.Locale.UK, point.lon)
+        locationMessage = null
+    }
+
+    fun savePlace(name: String, forDestination: Boolean) {
+        val point = if (forDestination) Validation.point(destLat, destLon) else Validation.point(originLat, originLon)
+        if (point == null) { placeMessage = "Set the ${if (forDestination) "destination" else "start"} first."; return }
+        val updated = Places.add(saved.places, name, point)
+        if (updated == null) {
+            placeMessage = if (name.isBlank()) "Give the place a name." else "You can keep up to ${Places.MAX} places. Remove one first."
+            return
+        }
+        placeMessage = null
+        update { it.copy(places = updated) }
+    }
+
+    fun removePlace(place: SavedPlace) { update { it.copy(places = it.places - place) } }
+
+    fun usePlace(place: SavedPlace, asDestination: Boolean) {
+        val lat = "%.5f".format(java.util.Locale.UK, place.point.lat)
+        val lon = "%.5f".format(java.util.Locale.UK, place.point.lon)
+        if (asDestination) { destLat = lat; destLon = lon } else { originLat = lat; originLon = lon }
+    }
+
+    fun sortedNearby(result: NearbyResult) = when (nearbySort) {
+        NearbySort.Closest -> result.stations
+        NearbySort.Cheapest -> result.stations.sortedWith(compareBy({ it.fill == null }, { it.fill?.fillCostPence ?: Long.MAX_VALUE }, { it.distanceMetres }))
+    }
+
+    private fun searchNearby() {
+        val origin = Validation.point(originLat, originLon) ?: return fail("Enter the start as latitude and longitude inside the UK, or use your location.")
+        val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
+        if (saved.appKey.isBlank()) return fail("Add the app key in Settings.")
+        job?.cancel()
+        nearby = NearbyState.Loading
+        job = viewModelScope.launch {
+            nearby = when (val outcome = OptimiseClient(saved.baseUrl, saved.appKey).nearby(origin, saved.fuel, litres)) {
+                is ApiOutcome.NearbyOk -> NearbyState.Done(outcome.result, java.time.Instant.now())
+                is ApiOutcome.Failure -> NearbyState.Failed(outcome)
+                is ApiOutcome.Ok -> NearbyState.Idle
+            }
+        }
+    }
+
     fun submit() {
         formError = null
+        if (mode == Mode.Nearby) return searchNearby()
         val origin = Validation.point(originLat, originLon)
             ?: return fail("Enter the start as latitude and longitude inside the UK.")
         val destination = if (mode == Mode.AlongJourney) {
@@ -103,12 +169,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     SearchState.Done(outcome, java.time.Instant.now())
                 }
                 is ApiOutcome.Failure -> SearchState.Failed(outcome)
+                is ApiOutcome.NearbyOk -> SearchState.Idle
             }
         }
     }
 
     fun cancel() {
         job?.cancel()
+        nearby = NearbyState.Idle
         search = SearchState.Idle
     }
 

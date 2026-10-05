@@ -206,7 +206,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             Card(Modifier.align(Alignment.TopCenter).padding(12.dp)) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        if (vm.mode == Mode.FuelTrip) "Long-press the map to set your start" else "Long-press the map to set the ${vm.mapTarget.name.lowercase()}",
+                        if (vm.mode != Mode.AlongJourney) "Long-press the map to set your start" else "Long-press the map to set the ${vm.mapTarget.name.lowercase()}",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     if (vm.mode == Mode.AlongJourney) {

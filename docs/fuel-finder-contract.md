@@ -210,3 +210,11 @@ claims. Tests run the real migration on SQLite through a D1 shim, not on D1 itse
 sends none) and HTTP 200 with any non-empty value. Not documented by the provider.
 The client now always sends `TankBear/0.1 (+https://github.com/Zagitalc/Tank-Bear)`.
 Whether Cloudflare's production egress is accepted by the provider remains untested.
+
+## Observed: opening times shape (5 October 2026)
+
+First 2000 stations: every record had `opening_times` with `usual_days` (all seven lowercase day names, each
+`open`/`close` as `HH:MM:SS` plus `is_24_hours`) and `bank_holiday` (`type` of `standard` or `bank holiday`, times,
+`is_24_hours`). About 45% of days were flagged 24 hours. The same shape appears for missing data (open equals close with
+the flag false), so Tank Bear treats that as "unknown". Timezone is not stated; UK local time is assumed. Which bank
+holidays apply is not stated either, so bank holiday hours are neither stored nor applied.

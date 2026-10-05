@@ -1,0 +1,130 @@
+{
+  "feed": {
+    "source": "Fuel Finder",
+    "lastCheckedAt": null,
+    "lastSuccessfulRefreshAt": "2026-10-05T11:50:00.000Z",
+    "lastStatus": "complete"
+  },
+  "stations": [
+    {
+      "fill": {
+        "feedFuelType": "E10",
+        "pencePerLitre": "139.9",
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "fillCostPence": 4197
+      },
+      "id": "near-open",
+      "name": "Example Services",
+      "brand": "Example",
+      "postcode": "RG1",
+      "position": {
+        "lat": 51.456,
+        "lon": -0.979
+      },
+      "distanceMetres": 199,
+      "temporaryClosure": false,
+      "isMotorway": false,
+      "opening": {
+        "state": "open",
+        "basis": "usual_hours",
+        "closesAt": "22:00",
+        "closesInMinutes": 540
+      },
+      "prices": [
+        {
+          "feedFuelType": "E10",
+          "pencePerLitre": "139.9",
+          "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+          "priceChangeEffective": "2026-10-03T08:00:00.000Z",
+          "firstObservedAt": "2026-10-03T08:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "fill": {
+        "feedFuelType": "E10",
+        "pencePerLitre": "129.9",
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "fillCostPence": 3897
+      },
+      "id": "near-closed",
+      "name": "Example Garage",
+      "brand": "Example",
+      "postcode": "RG1",
+      "position": {
+        "lat": 51.458,
+        "lon": -0.98
+      },
+      "distanceMetres": 432,
+      "temporaryClosure": false,
+      "isMotorway": false,
+      "opening": {
+        "state": "closed",
+        "basis": "usual_hours",
+        "opensAt": "06:00"
+      },
+      "prices": [
+        {
+          "feedFuelType": "E10",
+          "pencePerLitre": "129.9",
+          "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+          "priceChangeEffective": "2026-10-03T08:00:00.000Z",
+          "firstObservedAt": "2026-10-03T08:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "fill": null,
+      "id": "near-noprice",
+      "name": "Example Forecourt",
+      "brand": "Example",
+      "postcode": "RG1",
+      "position": {
+        "lat": 51.457,
+        "lon": -0.97
+      },
+      "distanceMetres": 636,
+      "temporaryClosure": true,
+      "isMotorway": false,
+      "opening": {
+        "state": "open",
+        "basis": "usual_hours",
+        "closesAt": "22:00",
+        "closesInMinutes": 540
+      },
+      "prices": []
+    },
+    {
+      "fill": {
+        "feedFuelType": "E10",
+        "pencePerLitre": "132.9",
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "fillCostPence": 3987
+      },
+      "id": "near-unknown",
+      "name": "Example Supermarket",
+      "brand": "Example",
+      "postcode": "RG1",
+      "position": {
+        "lat": 51.46,
+        "lon": -0.976
+      },
+      "distanceMetres": 650,
+      "temporaryClosure": false,
+      "isMotorway": false,
+      "opening": {
+        "state": "unknown",
+        "basis": "usual_hours"
+      },
+      "prices": [
+        {
+          "feedFuelType": "E10",
+          "pencePerLitre": "132.9",
+          "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+          "priceChangeEffective": "2026-10-03T08:00:00.000Z",
+          "firstObservedAt": "2026-10-03T08:00:00.000Z"
+        }
+      ]
+    }
+  ]
+}
