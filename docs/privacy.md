@@ -24,3 +24,14 @@ For later stages:
 Development tools have their own behaviour: Wrangler telemetry is disabled in
 the checked-in configuration. No assumption is made about Android Studio's
 user-managed preferences.
+
+## API access and rate limiting (Stage 5 hardening)
+
+`/v1` routes require an `X-Tank-Bear-Key` app key (rotatable list in the `API_KEYS` secret);
+`/health` stays open. The key identifies an app build, not a person, and can be extracted from
+an Android app, so it deters casual abuse but is not user authentication. Requests are limited
+to 10 journey optimisations and 60 nearby lookups per caller per minute, and 1500 optimisations
+per hour service-wide (provisional values). Counters use a truncated SHA-256 of the connecting
+IP and key, never the raw values, are kept at most two hours, and fail closed. Request bodies,
+coordinates and routes are not logged or stored; route results are cached in memory for five
+minutes and not persisted. Before release, add per-install tokens or attestation if abuse appears.

@@ -1,0 +1,103 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tank Bear journey and station API",
+    "version": "0.1.0",
+    "description": "Draft contract for the implemented /v1 routes. Unversioned until a client ships. All responses are Cache-Control: no-store."
+  },
+  "servers": [{ "url": "http://127.0.0.1:8787", "description": "Local development only" }],
+  "security": [{ "AppKey": [] }],
+  "paths": {
+    "/v1/journeys/optimise": {
+      "post": {
+        "operationId": "optimiseJourney",
+        "summary": "Rank fuel stops by fill cost plus routed detour cost",
+        "description": "Best among the stations checked, not a nationwide optimum. Rate limited per caller and service-wide.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OptimiseRequest" } } } },
+        "responses": {
+          "200": { "description": "Ranked result (status may be no_candidates).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OptimiseResponse" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" },
+          "415": { "$ref": "#/components/responses/Error" },
+          "422": { "description": "NO_ROUTE, JOURNEY_TOO_LONG or ROUTE_NEEDS_REVIEW.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "RATE_LIMITED or SERVICE_BUSY; see Retry-After.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "502": { "$ref": "#/components/responses/Error" },
+          "503": { "description": "NO_FUEL_DATA, FUEL_DATA_STALE, ROUTING_NOT_CONFIGURED, AUTH_NOT_CONFIGURED or UNAVAILABLE.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/v1/stations/nearby": {
+      "get": {
+        "operationId": "nearbyStations",
+        "summary": "Closest open stations with current prices",
+        "parameters": [
+          { "name": "lat", "in": "query", "required": true, "schema": { "type": "number", "minimum": 49, "maximum": 61 } },
+          { "name": "lon", "in": "query", "required": true, "schema": { "type": "number", "minimum": -9, "maximum": 2.5 } },
+          { "name": "radiusMetres", "in": "query", "schema": { "type": "integer", "minimum": 100, "maximum": 25000, "default": 5000 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Stations closest first. Feed health is separate from price age.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NearbyResponse" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AppKey": { "type": "apiKey", "in": "header", "name": "X-Tank-Bear-Key", "description": "Identifies the app build, not a person. A key inside an app can be extracted, so it deters casual abuse and allows rotation; it is not user authentication." }
+    },
+    "responses": { "Error": { "description": "Error envelope.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } } },
+    "schemas": {
+      "Error": { "type": "object", "required": ["error"], "properties": { "error": { "type": "object", "required": ["code", "message"], "properties": { "code": { "type": "string" }, "message": { "type": "string" } } } } },
+      "Point": { "type": "object", "required": ["lat", "lon"], "properties": { "lat": { "type": "number", "minimum": 49, "maximum": 61 }, "lon": { "type": "number", "minimum": -9, "maximum": 2.5 } } },
+      "OptimiseRequest": {
+        "type": "object",
+        "required": ["mode", "origin", "fuelType", "vehicle", "litresToBuy"],
+        "properties": {
+          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "origin": { "$ref": "#/components/schemas/Point" },
+          "destination": { "$ref": "#/components/schemas/Point", "description": "Required for along_journey; not allowed for fuel_trip." },
+          "fuelType": { "enum": ["E10", "B7"], "description": "B7 is standard diesel." },
+          "vehicle": { "type": "object", "required": ["mpgImperial"], "properties": { "mpgImperial": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "5 to 200." } } },
+          "litresToBuy": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "1 to 500." },
+          "limits": { "type": "object", "properties": { "maxExtraDistanceMetres": { "type": "integer", "minimum": 1, "maximum": 200000 }, "maxExtraDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 14400 } } }
+        }
+      },
+      "OptimiseResponse": {
+        "type": "object",
+        "required": ["calculationVersion", "mode", "status", "scope", "coverage", "routing", "feed", "baseline", "reference", "labels", "candidates", "excluded"],
+        "properties": {
+          "calculationVersion": { "type": "string" },
+          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "status": { "enum": ["ranked", "no_candidates"] },
+          "scope": { "type": "string" },
+          "coverage": { "type": "object", "required": ["stationsInSearchArea", "stationsRouted", "routingCalls", "partial", "notRouted", "excludedByLimits"] },
+          "routing": { "type": "object", "required": ["provider", "graphVersion"] },
+          "feed": { "type": "object", "required": ["source", "lastSuccessfulRefreshAt"] },
+          "baseline": { "type": ["object", "null"] },
+          "reference": { "type": ["object", "null"] },
+          "labels": { "type": ["object", "null"] },
+          "candidates": { "type": "array", "items": { "$ref": "#/components/schemas/RankedCandidate" } },
+          "excluded": { "type": "array" }
+        }
+      },
+      "RankedCandidate": {
+        "type": "object",
+        "required": ["stationId", "name", "rank", "price", "route", "detourDistanceMetres", "detourDurationSeconds", "fillCostPence", "detourFuelCostPence", "comparisonCostPence", "pumpSavingPence", "referenceDetourFuelCostPence", "trueSavingPence", "station", "priceSource", "routeGeometry", "stationSnapMetres"]
+      },
+      "NearbyResponse": {
+        "type": "object",
+        "required": ["feed", "stations"],
+        "properties": {
+          "feed": { "type": "object", "required": ["source", "lastCheckedAt", "lastSuccessfulRefreshAt", "lastStatus"] },
+          "stations": { "type": "array", "items": { "type": "object", "required": ["id", "name", "position", "distanceMetres", "temporaryClosure", "isMotorway", "prices"] } }
+        }
+      }
+    }
+  }
+}

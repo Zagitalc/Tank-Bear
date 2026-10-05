@@ -7,6 +7,7 @@ import { createFuelRepository } from "../src/repositories/fuel.ts";
 import { sqliteD1 } from "./d1-shim.ts";
 
 const N = 1200;
+const KEY = "test-key-0123456789-abcdefghij";
 const id = (n: number) => n.toString(16).padStart(64, "0");
 const iso = (mins: number) => new Date(Date.parse("2026-10-05T09:00:00Z") + mins * 60_000).toISOString();
 
@@ -138,8 +139,8 @@ test("only one refresh may hold the lease; an expired lease can be taken over", 
 test("nearby returns bounded, distance-ordered stations with prices and separate feed health", async () => {
   const { db } = sqliteD1();
   await runRefresh(client(world()), createFuelRepository(db), clock().now);
-  const env = { DB: db };
-  const res = await worker.fetch(new Request("https://t.test/v1/stations/nearby?lat=51.45&lon=-0.97&radiusMetres=1000&limit=5"), env);
+  const env = { DB: db, API_KEYS: KEY };
+  const res = await worker.fetch(new Request("https://t.test/v1/stations/nearby?lat=51.45&lon=-0.97&radiusMetres=1000&limit=5", { headers: { "x-tank-bear-key": KEY } }), env);
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;
   assert.equal(body.stations.length, 5);
@@ -149,17 +150,18 @@ test("nearby returns bounded, distance-ordered stations with prices and separate
   assert.equal(body.feed.lastSuccessfulRefreshAt, "2026-10-05T12:00:00.000Z");
 });
 
-test("nearby validates input and does not touch the database for bad requests", async () => {
-  const env = { DB: { prepare() { throw new Error("must not be called"); } } as unknown as D1Database };
+test("nearby validates input after the key check, without querying stations", async () => {
+  const { db, sql } = sqliteD1();
   for (const q of ["", "?lat=51&lon=-1&radiusMetres=900000", "?lat=0&lon=0", "?lat=51&lon=-1&limit=0", "?lat=abc&lon=-1", "?lat=51&lon=-1&limit=500"]) {
-    const res = await worker.fetch(new Request(`https://t.test/v1/stations/nearby${q}`), env);
+    const res = await worker.fetch(new Request(`https://t.test/v1/stations/nearby${q}`, { headers: { "x-tank-bear-key": KEY } }), { DB: db, API_KEYS: KEY });
     assert.equal(res.status, 400, q);
   }
+  assert.equal(Number((sql.prepare("SELECT COUNT(*) AS n FROM stations").get() as { n: number }).n), 0);
 });
 
 test("a database failure on nearby is 503 without leaking the error", async () => {
-  const env = { DB: { prepare() { throw new Error("secret connection string"); } } as unknown as D1Database };
-  const res = await worker.fetch(new Request("https://t.test/v1/stations/nearby?lat=51.45&lon=-0.97"), env);
+  const env = { DB: { prepare() { throw new Error("secret connection string"); } } as unknown as D1Database, API_KEYS: KEY };
+  const res = await worker.fetch(new Request("https://t.test/v1/stations/nearby?lat=51.45&lon=-0.97", { headers: { "x-tank-bear-key": KEY } }), env);
   assert.equal(res.status, 503);
   assert.doesNotMatch(await res.text(), /secret/);
 });

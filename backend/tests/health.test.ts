@@ -61,6 +61,6 @@ test("unsupported methods and unknown routes do not access the database", async 
   const method = await worker.fetch(request("/health", "POST"), env);
   assert.equal(method.status, 405);
   assert.equal(method.headers.get("allow"), "GET, HEAD");
-  const missing = await worker.fetch(request("/v1/journeys/optimise", "POST"), env);
+  const missing = await worker.fetch(request("/v1/prices", "POST"), env);
   assert.equal(missing.status, 404);
 });

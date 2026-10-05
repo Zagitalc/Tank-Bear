@@ -88,5 +88,25 @@ unreachable stations, huge detours and nearly identical origin/destination.
   routes. Negative route differences remain the economics engine's strict hold-for-review
   rule; routing makes no clamping decision.
 
-Not done: candidate shortlisting from D1 (Stage 5), hosting and benchmarking a real
-engine, the difficult-case benchmark list above, and the optimisation endpoint.
+## Stage 5 implementation (`backend/src/optimise/`, `api/optimise.ts`)
+
+1. Validate the request (UK bounds, bounded decimals, 4 KB body) before any I/O.
+2. Refuse if the feed has never loaded or its last successful refresh is over 6 hours old.
+   Staleness is the feed check, not a price's own age: an unchanged price is still usable.
+3. Route the baseline, refuse journeys over 400 km, then query D1 for open, priced stations in
+   20 km chunks of the baseline geometry (up to 3000 rows each) and keep those within 3 km of it.
+   Fuel trip uses a 10 km radius around the origin.
+4. Shortlist 12: 4 cheapest, 3 nearest the route, cheapest in each fifth of the journey, topped
+   up by price. Route A to station to B with the Stage 4 router, apply optional detour limits,
+   then rank with the Stage 2 engine. Temporarily or permanently closed stations are not candidates.
+5. Respond with explicit coverage and the scope line. A 20 second budget stops new routes.
+
+Checked end to end on 5 October 2026 with the live Fuel Finder feed loaded into an in-memory
+database and the local Valhalla: Reading to Oxford (24 stations in the corridor, 12 routed,
+13 calls, about 90 ms warm) and a Reading diesel fuel trip. One routed candidate was excluded
+for a toll/ferry flag. Those timings are not a benchmark and the shortlist has not been compared
+with a wider offline search. Prices in those runs were live data and are not stored in the repo.
+
+Not done: hosting a routing engine, the difficult-case benchmark list above, remaining-range
+filtering, a user-chosen reference station, request rate limiting and authentication, and a
+Northern Ireland graph.

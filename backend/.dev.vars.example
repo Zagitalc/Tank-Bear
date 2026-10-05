@@ -5,3 +5,8 @@ FUEL_FINDER_CLIENT_ID=""
 FUEL_FINDER_CLIENT_SECRET=""
 # test or live, matching the issued credentials.
 FUEL_FINDER_ENVIRONMENT=""
+# Comma-separated app keys for /v1 routes, each at least 24 random characters. Without one, /v1 returns 503.
+API_KEYS=""
+# Routing engine (for example a local Valhalla) and a label for its road graph.
+ROUTING_BASE_URL=""
+ROUTING_GRAPH_VERSION=""

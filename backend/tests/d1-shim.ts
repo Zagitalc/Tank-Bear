@@ -1,11 +1,12 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { URL as NodeURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
 /** Minimal D1 surface over node:sqlite, running the real migration SQL. */
 export function sqliteD1(): { db: D1Database; sql: DatabaseSync } {
   const sql = new DatabaseSync(":memory:");
-  sql.exec(readFileSync(new NodeURL("../migrations/0001_fuel_finder.sql", import.meta.url), "utf8"));
+  const dir = new NodeURL("../migrations/", import.meta.url);
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) sql.exec(readFileSync(new NodeURL(file, dir), "utf8"));
   const prepare = (query: string) => {
     let params: unknown[] = [];
     const stmt: Record<string, unknown> = {

@@ -25,6 +25,15 @@ export interface FuelRepository {
   recordFailure(outcome: RefreshOutcome): Promise<void>;
   nearby(query: NearbyQuery): Promise<NearbyRow[]>;
   feedStatus(): Promise<FeedStatus>;
+  /** Open, non-closed stations that currently have a price for the feed fuel type, inside any box. */
+  pricedStationsInBoxes(boxes: readonly BoxQuery[], feedFuelType: string): Promise<PricedRow[]>;
+}
+
+export interface BoxQuery { minLat: number; maxLat: number; minLon: number; maxLon: number }
+export interface PricedRow {
+  station: Station;
+  pencePerLitre: string;
+  priceLastUpdated: string;
 }
 
 export interface NearbyQuery {
@@ -153,6 +162,21 @@ export function createFuelRepository(db: D1Database): FuelRepository {
         });
       }
       return out;
+    },
+    async pricedStationsInBoxes(boxes, feedFuelType) {
+      const byId = new Map<string, PricedRow>();
+      for (const b of boxes) {
+        const rows = await db.prepare(
+          `SELECT s.*, p.pence_per_litre, p.price_last_updated FROM stations s
+             JOIN current_prices p ON p.node_id = s.node_id AND p.feed_fuel_type = ?1
+            WHERE s.permanent_closure = 0 AND s.temporary_closure = 0
+              AND s.latitude BETWEEN ?2 AND ?3 AND s.longitude BETWEEN ?4 AND ?5 LIMIT 3000`,
+        ).bind(feedFuelType, b.minLat, b.maxLat, b.minLon, b.maxLon).all<Record<string, unknown>>();
+        for (const r of rows.results) {
+          byId.set(String(r.node_id), { station: rowToStation(r), pencePerLitre: String(r.pence_per_litre), priceLastUpdated: String(r.price_last_updated) });
+        }
+      }
+      return [...byId.values()];
     },
     async feedStatus() {
       const r = await db.prepare("SELECT last_attempt_at, last_success_at, last_status FROM ingestion_state WHERE feed = ?1")
