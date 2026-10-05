@@ -27,7 +27,7 @@
       "usesFerry": false,
       "usesToll": false
     },
-    "geometry": "..."
+    "geometry": "_hgcaB~oez@_}hQ~zaP"
   },
   "reference": {
     "stationId": "station-a",
@@ -83,7 +83,7 @@
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
-      "routeGeometry": "...",
+      "routeGeometry": "_hgcaB~oez@_cgI~lpG_y`G~lpG",
       "stationSnapMetres": 3
     },
     {
@@ -130,7 +130,7 @@
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
-      "routeGeometry": "...",
+      "routeGeometry": "_hgcaB~oez@__|B~jlB_}kM~ntL",
       "stationSnapMetres": 3
     },
     {
@@ -177,7 +177,7 @@
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
         "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
       },
-      "routeGeometry": "...",
+      "routeGeometry": "_hgcaB~oez@_~cH~lpG_~cH~lpG",
       "stationSnapMetres": 3
     }
   ],

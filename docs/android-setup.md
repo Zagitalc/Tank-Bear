@@ -72,3 +72,14 @@ debug build, and enter the key in Settings. The emulator reaches your computer a
 `http://10.0.2.2:8787`; cleartext HTTP is allowed in debug builds for that address only.
 If the emulator reports "No activity found" or `/sdcard` errors, cold-boot it
 (`-no-snapshot-load`); a half-broken emulator also fails the navigation test.
+
+## Stage 6b: map
+
+A Map tab (MapLibre Native Android 13.6.1, OpenFreeMap style set in one place, `ui/MapConfig.kt`)
+shows your start and destination pins, the direct route (grey), the route through the selected station
+(amber, drawn over grey where they coincide), and a marker per ranked station. Tap a marker or use
+"Show route on map" on a result card to select; long-press the map to set the start or destination
+(chips choose which). The map sits above the info panel so MapLibre's OpenStreetMap attribution stays
+visible. OpenFreeMap has no uptime guarantee; replace the style address with a supported or self-hosted
+source before a public release (see docs/data-sources.md). Map selection needs internet for tiles.
+Not built: current location, saved places, a route for stations the API did not rank.

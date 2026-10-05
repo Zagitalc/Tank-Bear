@@ -41,7 +41,7 @@ private fun <T> Choice(label: String, selected: Boolean, onSelect: () -> Unit) {
 }
 
 @Composable
-fun FindScreen(vm: AppViewModel) {
+fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Make your fuel stop count", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -60,7 +60,7 @@ fun FindScreen(vm: AppViewModel) {
         }
         OutlinedButton(onClick = vm::useExample) { Text("Fill in an example (Reading to Oxford)") }
         Text(
-            "Picking places on a map and using your location come later. For now enter coordinates in decimal degrees.",
+            "Enter coordinates in decimal degrees, or long-press the Map tab to set them. Using your location comes later.",
             style = MaterialTheme.typography.bodyMedium,
         )
         vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
@@ -82,7 +82,7 @@ fun FindScreen(vm: AppViewModel) {
                     s.failure.retryAfterSeconds?.let { Text("Try again in about $it seconds.") }
                 }
             }
-            is SearchState.Done -> Results(s.outcome.result, s.at)
+            is SearchState.Done -> Results(s.outcome.result, s.at, vm, onShowOnMap)
         }
     }
 }
@@ -102,7 +102,7 @@ private fun CoordinateRow(lat: String, lon: String, onLat: (String) -> Unit, onL
 }
 
 @Composable
-private fun Results(result: JourneyResult, now: java.time.Instant) {
+private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewModel, onShowOnMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(result.scope, style = MaterialTheme.typography.titleMedium)
         Text(
@@ -118,12 +118,12 @@ private fun Results(result: JourneyResult, now: java.time.Instant) {
             Text("No station could be compared for this trip.", style = MaterialTheme.typography.bodyLarge)
         }
         val referenceName = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
-        result.candidates.forEach { StationCard(it, result, referenceName, now) }
+        result.candidates.forEach { StationCard(it, result, referenceName, now) { vm.selectStation(it.stationId); onShowOnMap() } }
     }
 }
 
 @Composable
-private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, now: java.time.Instant) {
+private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, now: java.time.Instant, onMap: () -> Unit) {
     val labels = buildList {
         if (c.stationId == r.bestOverallId) add("Best overall")
         if (c.stationId == r.cheapestPumpId) add("Cheapest pump")
@@ -142,6 +142,7 @@ private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, 
                 Text("A difference this small is within the estimate's margin.", style = MaterialTheme.typography.bodyMedium)
             }
             Text("Total for this stop ${Formatting.pence(c.comparisonCostPence)}", style = MaterialTheme.typography.bodyMedium)
+            OutlinedButton(onClick = onMap) { Text("Show route on map") }
         }
     }
 }

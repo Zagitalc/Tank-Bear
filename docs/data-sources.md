@@ -48,3 +48,10 @@ as a guaranteed production service.
 
 Vehicle values are user-entered in the MVP. No registration lookup or invented
 tank capacity/MPG is included.
+
+## Map tiles (development)
+
+The Android map uses OpenFreeMap (no key, commercial use allowed, attribution required, no SLA as stated
+on its site on 5 October 2026) through MapLibre. Spirited uses the same pairing. MapTiler Flex ($30 a month)
+or self-hosted PMTiles are the candidate release sources; neither is chosen. Public OSM tile servers
+and Esri tiles are not used.

@@ -3,6 +3,7 @@
     <string name="tagline">Smarter stops. Less wasted fuel.</string>
     <string name="find">Find</string>
     <string name="car">Car</string>
+    <string name="map">Map</string>
     <string name="settings">Settings</string>
     <string name="journey_title">Make your fuel stop count</string>
     <string name="journey_body">Compare pump prices with the extra driving needed to reach each station.</string>

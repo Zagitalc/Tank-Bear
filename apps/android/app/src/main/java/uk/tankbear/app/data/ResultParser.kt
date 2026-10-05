@@ -27,6 +27,8 @@ object ResultParser {
                 referenceDetourFuelCostPence = c.getLong("referenceDetourFuelCostPence"),
                 trueSavingPence = c.getLong("trueSavingPence"),
                 worseThanBestPence = c.getLong("worseThanBestPence"),
+                position = c.getJSONObject("station").getJSONObject("position").let { LatLon(it.getDouble("lat"), it.getDouble("lon")) },
+                routeGeometry = c.getString("routeGeometry"),
             )
         }
         return JourneyResult(
@@ -41,6 +43,7 @@ object ResultParser {
             cheapestPumpId = labels?.optString("cheapestPumpStationId"),
             smallestDetourId = labels?.optString("smallestDetourStationId"),
             candidates = candidates,
+            baselineGeometry = o.optJSONObject("baseline")?.optString("geometry")?.takeIf { it.isNotEmpty() },
         )
     }
 
