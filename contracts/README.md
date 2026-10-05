@@ -23,8 +23,8 @@ must be inside the UK. Response: `scope` ("Best among the stations checked."), `
 (stations in the search area, routed, not routed with reasons, limit exclusions, partial
 flag), baseline route, named `reference`, `labels`, ranked `candidates` with the economics
 fields, price provenance, route geometry and snap distance, and `excluded` with reasons.
-Errors use `{error:{code,message}}`: 400 invalid, 413/415 body, 422 `NO_ROUTE` /
+Both `/v1` routes need an `X-Tank-Bear-Key` header and are rate limited (429 with `Retry-After`). The machine-readable contract is `openapi/journeys.json`, kept in sync with the real response by a test.
+Errors use `{error:{code,message}}`: 401 `UNAUTHORISED`, 400 invalid, 413/415 body, 422 `NO_ROUTE` /
 `JOURNEY_TOO_LONG` / `ROUTE_NEEDS_REVIEW`, 502 `ROUTING_UNAVAILABLE`, 503 `NO_FUEL_DATA` /
-`FUEL_DATA_STALE` / `ROUTING_NOT_CONFIGURED`. Responses are `no-store`. No OpenAPI file,
-generated client or shared response fixture exists yet; the behaviour is covered by
+`FUEL_DATA_STALE` / `ROUTING_NOT_CONFIGURED`. Responses are `no-store`. No generated client or shared response fixture exists yet; the behaviour is covered by
 `backend/tests/optimise.test.ts`.

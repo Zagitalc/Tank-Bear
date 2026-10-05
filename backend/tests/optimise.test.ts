@@ -10,6 +10,8 @@ import { encodePolyline } from "../src/routing/polyline.ts";
 import type { RouteOutcome, RoutingProvider } from "../src/routing/types.ts";
 import { sqliteD1 } from "./d1-shim.ts";
 
+const KEY = "test-key-0123456789-abcdefghij";
+const withKey = (r: Request, key = KEY) => { r.headers.set("x-tank-bear-key", key); return r; };
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const A: Coordinates = { lat: 51.45, lon: -0.97 };
 const B: Coordinates = { lat: 51.75, lon: -1.25 };
@@ -181,10 +183,10 @@ test("request validation, media type, size and configuration are enforced before
 
 test("worker routes: POST only, and routing config comes from the environment", async () => {
   const s = seed();
-  const get = await worker.fetch(new Request("https://t.test/v1/journeys/optimise"), { DB: s.db });
+  const get = await worker.fetch(new Request("https://t.test/v1/journeys/optimise"), { DB: s.db, API_KEYS: KEY });
   assert.equal(get.status, 405);
   assert.equal(get.headers.get("allow"), "POST");
-  const unconfigured = await worker.fetch(request(), { DB: s.db });
+  const unconfigured = await worker.fetch(withKey(request()), { DB: s.db, API_KEYS: KEY });
   assert.equal(unconfigured.status, 503);
   assert.equal(((await unconfigured.json()) as any).error.code, "ROUTING_NOT_CONFIGURED");
 });
@@ -210,4 +212,17 @@ test("geometry: offsets, fractions and corridor boxes", () => {
   const boxes = corridorBoxes(buildLine(Array.from({ length: 50 }, (_, i) => [51 + i * 0.01, -1] as [number, number])), 3500);
   assert.ok(boxes.length >= 2);
   assert.ok(boxes.every((b) => b.minLat < b.maxLat && b.minLon < b.maxLon));
+});
+
+test("the OpenAPI contract names every field the optimise response actually returns", async () => {
+  const spec = JSON.parse((await import("node:fs")).readFileSync(new (await import("node:url")).URL("../../contracts/openapi/journeys.json", import.meta.url), "utf8"));
+  const s = seed();
+  s.add("OnRoute", onRoute(0.5), "142.9");
+  s.add("Off", onRoute(0.5, 0.018), "128.9");
+  const { body } = await run(s);
+  const schemas = spec.components.schemas;
+  assert.deepEqual(Object.keys(body).sort(), [...schemas.OptimiseResponse.required].sort());
+  for (const key of schemas.RankedCandidate.required) assert.ok(key in body.candidates[0], key);
+  assert.ok(spec.paths["/v1/journeys/optimise"].post.responses["429"]);
+  assert.equal(spec.components.securitySchemes.AppKey.name, "X-Tank-Bear-Key");
 });
