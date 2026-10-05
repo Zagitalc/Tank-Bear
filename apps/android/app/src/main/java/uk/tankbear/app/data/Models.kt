@@ -29,7 +29,7 @@ data class OpeningInfo(
     companion object { val UNKNOWN = OpeningInfo("unknown") }
 }
 
-data class NearbyFill(val pencePerLitre: String, val priceLastUpdated: String, val fillCostPence: Long)
+data class NearbyFill(val pencePerLitre: String, val priceLastUpdated: String, val fillCostPence: Long, val vsLocalMedianPencePerLitre: String?)
 
 data class NearbyStation(
     val id: String,
@@ -43,7 +43,7 @@ data class NearbyStation(
     val fill: NearbyFill?,
 )
 
-data class NearbyResult(val feedLastSuccessfulRefresh: String?, val stations: List<NearbyStation>)
+data class NearbyResult(val feedLastSuccessfulRefresh: String?, val stations: List<NearbyStation>, val localMedianPencePerLitre: String? = null)
 
 data class SavedPlace(val name: String, val point: LatLon)
 
@@ -88,7 +88,29 @@ data class JourneyResult(
 
 enum class FailureKind { Network, Unauthorised, RateLimited, NoRoute, NoData, Invalid, Server }
 
+data class HistoryCoverage(
+    val windowDays: Int,
+    val watchingSince: String?,
+    val sufficientForTrend: Boolean,
+    val reason: String?,
+)
+
+data class PricePoint(val at: String, val pencePerLitre: String)
+
+data class HistoryTrend(val changePencePerLitre: String, val direction: String, val sincePencePerLitre: String)
+
+data class PriceHistory(
+    val stationName: String,
+    val coverage: HistoryCoverage,
+    val points: List<PricePoint>,
+    val currentPencePerLitre: String?,
+    val trend: HistoryTrend?,
+    val windowFrom: String,
+    val windowTo: String,
+)
+
 sealed interface ApiOutcome {
+    data class HistoryOk(val history: PriceHistory) : ApiOutcome
     data class Ok(val result: JourneyResult) : ApiOutcome
     data class NearbyOk(val result: NearbyResult) : ApiOutcome
     data class Failure(val kind: FailureKind, val message: String, val retryAfterSeconds: Int? = null) : ApiOutcome

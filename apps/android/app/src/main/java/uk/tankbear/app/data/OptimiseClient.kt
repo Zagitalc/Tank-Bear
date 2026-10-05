@@ -63,6 +63,29 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
         }
     }
 
+    /** Recorded price history for one station and grade over `days`. */
+    suspend fun history(stationId: String, fuel: FuelType, days: Int = 7): ApiOutcome = withContext(Dispatchers.IO) {
+        try {
+            val connection = (URL(baseUrl.trimEnd('/') + "/v1/stations/$stationId/history?fuelType=${fuel.api}&days=$days").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8_000
+                readTimeout = 20_000
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("X-Tank-Bear-Key", appKey)
+            }
+            try {
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (status == 200) ApiOutcome.HistoryOk(ResultParser.parseHistory(text))
+                else failure(status, ResultParser.errorCode(text), connection.getHeaderField("Retry-After")?.toIntOrNull())
+            } finally {
+                connection.disconnect()
+            }
+        } catch (_: Exception) {
+            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
+        }
+    }
+
     companion object {
         fun body(r: JourneyRequest): String = JSONObject().apply {
             put("mode", r.mode.api)

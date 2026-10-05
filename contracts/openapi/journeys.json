@@ -27,6 +27,26 @@
         }
       }
     },
+    "/v1/stations/{id}/history": {
+      "get": {
+        "operationId": "stationHistory",
+        "summary": "Recorded price changes for one station and grade, with honest coverage",
+        "description": "Returns what Tank Bear has recorded. A trend is present only if the whole window was watched with few missed refreshes; otherwise trend is null and coverage.reason says why.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" } },
+          { "name": "fuelType", "in": "query", "required": true, "schema": { "enum": ["E10", "B7"] } },
+          { "name": "days", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 30, "default": 7 } }
+        ],
+        "responses": {
+          "200": { "description": "History.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HistoryResponse" } } } },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "429": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/v1/stations/nearby": {
       "get": {
         "operationId": "nearbyStations",
@@ -92,9 +112,19 @@
         "type": "object",
         "required": ["stationId", "name", "rank", "price", "route", "detourDistanceMetres", "detourDurationSeconds", "fillCostPence", "detourFuelCostPence", "comparisonCostPence", "pumpSavingPence", "referenceDetourFuelCostPence", "trueSavingPence", "station", "priceSource", "routeGeometry", "stationSnapMetres", "opening"]
       },
+      "HistoryResponse": {
+        "type": "object",
+        "required": ["station", "fuelType", "window", "current", "coverage", "points", "startKnown", "currentPencePerLitre", "trend", "note"],
+        "properties": {
+          "coverage": { "type": "object", "required": ["windowDays", "watchingSince", "observedRefreshes", "expectedRefreshes", "coverage", "sufficientForTrend", "reason"] },
+          "points": { "type": "array", "items": { "type": "object", "required": ["at", "pencePerLitre"] } },
+          "trend": { "type": ["object", "null"] }
+        }
+      },
       "NearbyResponse": {
         "type": "object",
         "required": ["feed", "stations"],
+        "description": "With fuelType and litres also returns localSummary (median, cheapest, dearest among stations shown) and per-station fill.vsLocalMedianPencePerLitre.",
         "properties": {
           "feed": { "type": "object", "required": ["source", "lastCheckedAt", "lastSuccessfulRefreshAt", "lastStatus"] },
           "stations": { "type": "array", "items": { "type": "object", "required": ["id", "name", "position", "distanceMetres", "temporaryClosure", "isMotorway", "opening", "prices"] } }

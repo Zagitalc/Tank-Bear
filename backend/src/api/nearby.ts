@@ -1,4 +1,5 @@
 import { decimal, multiply, pence } from "../domain/numbers.ts";
+import { fromThousandths, medianThousandths, toThousandths } from "../history/series.ts";
 import { openingStatus } from "../opening/status.ts";
 import type { FuelRepository, NearbyRow } from "../repositories/fuel.ts";
 
@@ -22,12 +23,33 @@ function int(params: URLSearchParams, name: string, fallback: number): number | 
 const FEED_FUEL = { E10: "E10", B7: "B7_STANDARD" } as const;
 type Fuel = keyof typeof FEED_FUEL;
 
+/** Median and range of the prices shown, among stations that look available. Used for "vs local median". */
+export function localSummary(rows: NearbyRow[], fuel: Fuel) {
+  const prices = rows
+    .filter((r) => !r.station.temporaryClosure)
+    .map((r) => r.prices.find((p) => p.feedFuelType === FEED_FUEL[fuel])?.pencePerLitre)
+    .filter((p): p is string => p !== undefined)
+    .map(toThousandths);
+  const median = medianThousandths(prices);
+  if (median === null) return null;
+  return {
+    fuelType: fuel,
+    stationsWithPrice: prices.length,
+    medianPencePerLitre: fromThousandths(median),
+    cheapestPencePerLitre: fromThousandths(Math.min(...prices)),
+    dearestPencePerLitre: fromThousandths(Math.max(...prices)),
+  };
+}
+
 export function shapeNearby(rows: NearbyRow[], at: Date = new Date(), fuel?: { type: Fuel; litres: string }) {
+  const summary = fuel ? localSummary(rows, fuel.type) : null;
+  const median = summary ? toThousandths(summary.medianPencePerLitre) : null;
   return rows.map((r) => {
     // Fill cost uses the same exact decimal arithmetic and rounding as the journey economics.
     const match = fuel ? r.prices.find((p) => p.feedFuelType === FEED_FUEL[fuel.type]) : undefined;
     const fill = fuel && match ? { feedFuelType: match.feedFuelType, pencePerLitre: match.pencePerLitre, priceLastUpdated: match.priceLastUpdated,
-      fillCostPence: pence(multiply(decimal(fuel.litres, "litres"), decimal(match.pencePerLitre, "price"))) } : null;
+      fillCostPence: pence(multiply(decimal(fuel.litres, "litres"), decimal(match.pencePerLitre, "price"))),
+      vsLocalMedianPencePerLitre: median === null ? null : fromThousandths(toThousandths(match.pencePerLitre) - median) } : null;
     return shapeOne(r, at, fuel ? { fill } : {});
   });
 }
@@ -80,6 +102,7 @@ export async function nearbyResponse(url: URL, repo: FuelRepository, now: () => 
         // Feed health is separate from any price's own age.
         feed: { source: "Fuel Finder", lastCheckedAt: status.lastAttemptAt, lastSuccessfulRefreshAt: status.lastSuccessAt, lastStatus: status.lastStatus },
         stations: shapeNearby(rows, new Date(now()), fuel),
+        ...(fuel ? { localSummary: localSummary(rows, fuel.type) } : {}),
       },
       { headers },
     );

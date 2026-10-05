@@ -55,3 +55,12 @@ The Android map uses OpenFreeMap (no key, commercial use allowed, attribution re
 on its site on 5 October 2026) through MapLibre. Spirited uses the same pairing. MapTiler Flex ($30 a month)
 or self-hosted PMTiles are the candidate release sources; neither is chosen. Public OSM tile servers
 and Esri tiles are not used.
+
+## History and coverage (Stage 8)
+
+`price_changes` records first observations and later changes keyed by the provider's own change time; `refresh_log` records
+every complete refresh. A trend over N days is claimed only if the first recorded refresh is at least N days old and at least
+80% of the expected 15-minute refreshes in the window were recorded. Otherwise the API returns the points it has and the
+reason. History starts on the day Stage 3 first ran against this database (5 October 2026); it cannot be reconstructed
+earlier. The provider's change time can precede our first observation, so the start of a series can be older than
+our watching; the coverage rule still requires the watching to span the whole window.

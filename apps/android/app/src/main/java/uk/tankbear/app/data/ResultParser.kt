@@ -76,10 +76,27 @@ object ResultParser {
                 distanceMetres = s.getInt("distanceMetres"),
                 temporaryClosure = s.optBoolean("temporaryClosure", false),
                 opening = opening(s.optJSONObject("opening")),
-                fill = fill?.let { NearbyFill(it.getString("pencePerLitre"), it.getString("priceLastUpdated"), it.getLong("fillCostPence")) },
+                fill = fill?.let { NearbyFill(it.getString("pencePerLitre"), it.getString("priceLastUpdated"), it.getLong("fillCostPence"), it.nullableString("vsLocalMedianPencePerLitre")) },
             )
         }
-        return NearbyResult(o.getJSONObject("feed").nullableString("lastSuccessfulRefreshAt"), stations)
+        return NearbyResult(o.getJSONObject("feed").nullableString("lastSuccessfulRefreshAt"), stations, o.optJSONObject("localSummary")?.nullableString("medianPencePerLitre"))
+    }
+
+    fun parseHistory(json: String): PriceHistory {
+        val o = JSONObject(json)
+        val c = o.getJSONObject("coverage")
+        val pts = o.getJSONArray("points")
+        val trend = o.optJSONObject("trend")
+        val window = o.getJSONObject("window")
+        return PriceHistory(
+            stationName = o.getJSONObject("station").getString("name"),
+            coverage = HistoryCoverage(c.getInt("windowDays"), c.nullableString("watchingSince"), c.getBoolean("sufficientForTrend"), c.nullableString("reason")),
+            points = (0 until pts.length()).map { PricePoint(pts.getJSONObject(it).getString("at"), pts.getJSONObject(it).getString("pencePerLitre")) },
+            currentPencePerLitre = o.nullableString("currentPencePerLitre"),
+            trend = trend?.let { HistoryTrend(it.getString("changePencePerLitre"), it.getString("direction"), it.getString("sincePencePerLitre")) },
+            windowFrom = window.getString("from"),
+            windowTo = window.getString("to"),
+        )
     }
 
     fun errorCode(json: String): String? = try {

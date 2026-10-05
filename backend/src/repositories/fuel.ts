@@ -26,6 +26,13 @@ export interface FuelRepository {
   recordFailure(outcome: RefreshOutcome): Promise<void>;
   nearby(query: NearbyQuery): Promise<NearbyRow[]>;
   feedStatus(): Promise<FeedStatus>;
+  /** Refresh log: when the feed was first and how often successfully observed since a time. */
+  refreshCoverage(since: string): Promise<{ first: string | null; observedSince: number }>;
+  purgeRefreshLog(before: string): Promise<void>;
+  /** Recorded changes for one station and grade, oldest first: all since `since` plus the one in effect before it. */
+  priceChanges(nodeId: string, feedFuelType: string, since: string): Promise<{ effective: string; pencePerLitre: string; observedAt: string }[]>;
+  station(nodeId: string): Promise<Station | null>;
+  currentPrice(nodeId: string, feedFuelType: string): Promise<{ pencePerLitre: string; priceLastUpdated: string } | null>;
   /** Open, non-closed stations that currently have a price for the feed fuel type, inside any box. */
   pricedStationsInBoxes(boxes: readonly BoxQuery[], feedFuelType: string): Promise<PricedRow[]>;
 }
@@ -132,6 +139,8 @@ export function createFuelRepository(db: D1Database): FuelRepository {
       }
       // Health is written last: a crash part-way leaves no false "success" behind, and
       // every statement above is idempotent so the next run repairs it.
+      st.push(db.prepare("INSERT OR REPLACE INTO refresh_log (at, station_count, priced_count) VALUES (?1,?2,?3)")
+        .bind(outcome.at, outcome.stationCount ?? 0, outcome.pricedStationCount ?? 0));
       await runChunks(st);
       await stateUpdate(outcome, true).run();
     },
@@ -179,6 +188,33 @@ export function createFuelRepository(db: D1Database): FuelRepository {
         }
       }
       return [...byId.values()];
+    },
+    async refreshCoverage(since) {
+      const first = await db.prepare("SELECT MIN(at) AS first FROM refresh_log").first<{ first: string | null }>();
+      const n = await db.prepare("SELECT COUNT(*) AS n FROM refresh_log WHERE at >= ?1").bind(since).first<{ n: number }>();
+      return { first: first?.first ?? null, observedSince: n?.n ?? 0 };
+    },
+    async purgeRefreshLog(before) {
+      await db.prepare("DELETE FROM refresh_log WHERE at < ?1").bind(before).run();
+    },
+    async priceChanges(nodeId, feedFuelType, since) {
+      const rows = await db.prepare(
+        `SELECT price_change_effective AS effective, pence_per_litre AS pence, observed_at AS observed FROM price_changes
+          WHERE node_id = ?1 AND feed_fuel_type = ?2 AND (price_change_effective >= ?3 OR price_change_effective =
+            (SELECT MAX(price_change_effective) FROM price_changes WHERE node_id = ?1 AND feed_fuel_type = ?2 AND price_change_effective < ?3))
+          ORDER BY price_change_effective`,
+      ).bind(nodeId, feedFuelType, since).all<Record<string, string>>();
+      return rows.results.map((r) => ({ effective: r.effective!, pencePerLitre: r.pence!, observedAt: r.observed! }));
+    },
+    async station(nodeId) {
+      const r = await db.prepare("SELECT * FROM stations WHERE node_id = ?1").bind(nodeId).first<Record<string, unknown>>();
+      if (!r) return null;
+      return rowToStation(r);
+    },
+    async currentPrice(nodeId, feedFuelType) {
+      const r = await db.prepare("SELECT pence_per_litre AS p, price_last_updated AS u FROM current_prices WHERE node_id = ?1 AND feed_fuel_type = ?2")
+        .bind(nodeId, feedFuelType).first<{ p: string; u: string }>();
+      return r ? { pencePerLitre: r.p, priceLastUpdated: r.u } : null;
     },
     async feedStatus() {
       const r = await db.prepare("SELECT last_attempt_at, last_success_at, last_status FROM ingestion_state WHERE feed = ?1")

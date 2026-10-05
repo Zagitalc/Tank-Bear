@@ -169,4 +169,32 @@ class DataTest {
         assertTrue(Places.decode("[{\"n\":\"x\",\"lat\":0,\"lon\":0}]").isEmpty())
         assertTrue(Places.decode("[{\"n\":\"\",\"lat\":51.4,\"lon\":-1.0}]").isEmpty())
     }
+
+    @Test fun parsesAWellWatchedHistoryWithATrend() {
+        val h = ResultParser.parseHistory(javaClass.classLoader!!.getResource("history-response-sample.json")!!.readText())
+        assertEquals("Example Services", h.stationName)
+        assertTrue(h.coverage.sufficientForTrend)
+        assertNull(h.coverage.reason)
+        assertEquals(listOf("140.9", "138.9", "136.9"), h.points.map { it.pencePerLitre })
+        assertEquals("down", h.trend!!.direction)
+        assertEquals("Down 4p/L over 7 days (from 140.9p/L)", Formatting.trendHeadline(h.trend!!, 7))
+    }
+
+    @Test fun anUnderWatchedHistoryHasNoTrendAndSaysWhy() {
+        val h = ResultParser.parseHistory(javaClass.classLoader!!.getResource("history-insufficient-sample.json")!!.readText())
+        assertFalse(h.coverage.sufficientForTrend)
+        assertNull(h.trend)
+        assertTrue(h.coverage.reason!!.contains("1.0 of the 7 days"))
+        assertTrue(h.points.isNotEmpty())
+    }
+
+    @Test fun localMedianComparisonIsPlain() {
+        assertEquals("10p/L above the local median", Formatting.versusMedian("10"))
+        assertEquals("2.1p/L below the local median", Formatting.versusMedian("-2.1"))
+        assertEquals("At the local median", Formatting.versusMedian("0"))
+        assertNull(Formatting.versusMedian(null))
+        val n = ResultParser.parseNearby(nearbySample)
+        assertEquals("132.9", n.localMedianPencePerLitre)
+        assertTrue(n.stations.first { it.id == "near-open" }.fill!!.vsLocalMedianPencePerLitre != null)
+    }
 }
