@@ -11,7 +11,8 @@
         "feedFuelType": "E10",
         "pencePerLitre": "139.9",
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
-        "fillCostPence": 4197
+        "fillCostPence": 4197,
+        "vsLocalMedianPencePerLitre": "7"
       },
       "id": "near-open",
       "name": "Example Services",
@@ -45,7 +46,8 @@
         "feedFuelType": "E10",
         "pencePerLitre": "129.9",
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
-        "fillCostPence": 3897
+        "fillCostPence": 3897,
+        "vsLocalMedianPencePerLitre": "-3"
       },
       "id": "near-closed",
       "name": "Example Garage",
@@ -99,7 +101,8 @@
         "feedFuelType": "E10",
         "pencePerLitre": "132.9",
         "priceLastUpdated": "2026-10-03T08:00:00.000Z",
-        "fillCostPence": 3987
+        "fillCostPence": 3987,
+        "vsLocalMedianPencePerLitre": "0"
       },
       "id": "near-unknown",
       "name": "Example Supermarket",
@@ -126,5 +129,12 @@
         }
       ]
     }
-  ]
+  ],
+  "localSummary": {
+    "fuelType": "E10",
+    "stationsWithPrice": 3,
+    "medianPencePerLitre": "132.9",
+    "cheapestPencePerLitre": "129.9",
+    "dearestPencePerLitre": "139.9"
+  }
 }

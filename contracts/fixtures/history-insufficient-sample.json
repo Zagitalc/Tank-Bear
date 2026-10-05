@@ -1,0 +1,43 @@
+{
+  "station": {
+    "id": "abababababababababababababababababababababababababababababababab",
+    "name": "Example Services"
+  },
+  "fuelType": "E10",
+  "window": {
+    "days": 7,
+    "from": "2026-10-05T12:00:00.000Z",
+    "to": "2026-10-12T12:00:00.000Z"
+  },
+  "current": {
+    "pencePerLitre": "136.9",
+    "priceLastUpdated": "2026-10-11T12:00:00.000Z"
+  },
+  "coverage": {
+    "windowDays": 7,
+    "watchingSince": "2026-10-11T12:00:00.000Z",
+    "observedRefreshes": 96,
+    "expectedRefreshes": 96,
+    "coverage": 1,
+    "sufficientForTrend": false,
+    "reason": "Prices have been watched for 1.0 of the 7 days needed."
+  },
+  "points": [
+    {
+      "at": "2026-10-05T12:00:00.000Z",
+      "pencePerLitre": "140.9"
+    },
+    {
+      "at": "2026-10-08T12:00:00.000Z",
+      "pencePerLitre": "138.9"
+    },
+    {
+      "at": "2026-10-11T12:00:00.000Z",
+      "pencePerLitre": "136.9"
+    }
+  ],
+  "startKnown": true,
+  "currentPencePerLitre": "136.9",
+  "trend": null,
+  "note": "Each point is the price from the provider's own change time until the next point. Changes made between refreshes are dated by the provider."
+}

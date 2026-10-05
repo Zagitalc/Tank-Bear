@@ -1,4 +1,5 @@
 import { guard } from "./api/guard.ts";
+import { historyResponse } from "./api/history.ts";
 import { healthResponse } from "./api/health.ts";
 import { nearbyResponse } from "./api/nearby.ts";
 import { optimiseResponse, routingProvider } from "./api/optimise.ts";
@@ -24,6 +25,8 @@ export default {
   async scheduled(_controller, env): Promise<void> {
     // Counters older than two hours are useless; failure here must not block the refresh.
     await createRateLimiter(env.DB).purgeBefore(Math.floor(Date.now() / 1000) - 7200).catch(() => undefined);
+    // Keep 35 days of refresh log: enough for a 30 day window plus slack.
+    await createFuelRepository(env.DB).purgeRefreshLog(new Date(Date.now() - 35 * 86_400_000).toISOString()).catch(() => undefined);
     if (!env.FUEL_FINDER_CLIENT_ID || !env.FUEL_FINDER_CLIENT_SECRET) return;
     const client = createFuelFinderClient(
       { clientId: env.FUEL_FINDER_CLIENT_ID, clientSecret: env.FUEL_FINDER_CLIENT_SECRET },
@@ -44,6 +47,13 @@ async function route(request: Request, env: Env): Promise<Response> {
       return request.method === "HEAD"
         ? new Response(null, { status: response.status, headers: response.headers })
         : response;
+    }
+    const historyMatch = /^\/v1\/stations\/([^/]+)\/history$/.exec(url.pathname);
+    if (historyMatch && (request.method === "GET" || request.method === "HEAD")) {
+      const denied = await guard(request, env, createRateLimiter(env.DB), "history");
+      if (denied) return denied;
+      const response = await historyResponse(url, historyMatch[1]!, createFuelRepository(env.DB));
+      return request.method === "HEAD" ? new Response(null, { status: response.status, headers: response.headers }) : response;
     }
     if (url.pathname === "/v1/journeys/optimise") {
       if (request.method !== "POST") {

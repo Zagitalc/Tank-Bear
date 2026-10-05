@@ -107,3 +107,14 @@ any before each test. The tests do not talk to the backend. Map long-press is no
 the real map view); it was checked by hand with `adb shell input swipe x y x y 1200` on 5 October 2026: one press set the
 start and, after choosing the Destination chip, another set the destination, and both appeared on the Find tab.
 If the emulator reports "No activity found" or `/sdcard` errors, cold-boot it first.
+
+## Stage 8: price history and local comparison
+
+- **Price history** button on Nearby and journey cards loads `GET /v1/stations/{id}/history` for the chosen fuel (7 days).
+  The panel shows a step chart of recorded changes, a trend line only when the backend says the window was fully watched,
+  and otherwise the exact reason ("Prices have been watched for 0.0 of the 7 days needed."). Checked on the emulator against
+  the live feed on day one: the honest "No 7-day trend yet" state. The multi-point chart and a real trend are covered by
+  parser/formatting tests on a synthetic fixture, not yet seen on screen with real accumulated history.
+- **Local comparison:** Nearby cards say how many p/L above or below the median of the stations shown.
+- Debug tip: the emulator can drop `adb shell input text` characters. Preloading the DataStore with `run-as` (protobuf
+  map of `app_key`, `mpg`, `litres`, `fuel`, `base_url`) is more reliable than typing the key.

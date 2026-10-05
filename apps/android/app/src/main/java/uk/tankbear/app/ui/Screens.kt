@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -35,13 +36,20 @@ import uk.tankbear.app.data.NearbyStation
 import uk.tankbear.app.data.NearbyResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import uk.tankbear.app.data.Candidate
+import uk.tankbear.app.data.PriceHistory
 import uk.tankbear.app.data.Formatting
 import uk.tankbear.app.data.JourneyResult
 import uk.tankbear.app.data.Mode
@@ -148,12 +156,12 @@ private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewMo
             Text("No station could be compared for this trip.", style = MaterialTheme.typography.bodyLarge)
         }
         val referenceName = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
-        result.candidates.forEach { StationCard(it, result, referenceName, now) { vm.selectStation(it.stationId); onShowOnMap() } }
+        result.candidates.forEach { StationCard(it, result, referenceName, now, vm) { vm.selectStation(it.stationId); onShowOnMap() } }
     }
 }
 
 @Composable
-private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, now: java.time.Instant, onMap: () -> Unit) {
+private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, now: java.time.Instant, vm: AppViewModel, onMap: () -> Unit) {
     val labels = buildList {
         if (c.stationId == r.bestOverallId) add("Best overall")
         if (c.stationId == r.cheapestPumpId) add("Cheapest pump")
@@ -173,7 +181,11 @@ private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, 
                 Text("A difference this small is within the estimate's margin.", style = MaterialTheme.typography.bodyMedium)
             }
             Text("Total for this stop ${Formatting.pence(c.comparisonCostPence)}", style = MaterialTheme.typography.bodyMedium)
-            OutlinedButton(onClick = onMap) { Text("Show route on map") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onMap) { Text("Show route on map") }
+                OutlinedButton(onClick = { vm.toggleHistory(c.stationId) }) { Text(if (vm.histories.containsKey(c.stationId)) "Hide history" else "Price history") }
+            }
+            HistoryPanel(vm, c.stationId, now)
         }
     }
 }
@@ -324,12 +336,12 @@ private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time
             NearbySort.entries.forEach { sort -> FilterChip(selected = vm.nearbySort == sort, onClick = { vm.nearbySort = sort }, label = { Text(sort.name) }) }
         }
         if (stations.isEmpty()) Text("No stations with data near that point.", style = MaterialTheme.typography.bodyLarge)
-        stations.forEach { NearbyCard(it, it.id == cheapest?.id, now) }
+        stations.forEach { NearbyCard(it, it.id == cheapest?.id, now, vm) }
     }
 }
 
 @Composable
-private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Instant) {
+private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Instant, vm: AppViewModel) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (cheapest) Text("Cheapest here", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -339,7 +351,71 @@ private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Insta
             s.fill?.let {
                 Text("${Formatting.pricePerLitre(it.pencePerLitre)} · price changed ${Formatting.age(it.priceLastUpdated, now)}")
                 Text("Filling up would cost ${Formatting.pence(it.fillCostPence)}", style = MaterialTheme.typography.titleSmall)
+                Formatting.versusMedian(it.vsLocalMedianPencePerLitre)?.let { line -> Text(line, style = MaterialTheme.typography.bodyMedium) }
+                OutlinedButton(onClick = { vm.toggleHistory(s.id) }) { Text(if (vm.histories.containsKey(s.id)) "Hide history" else "Price history") }
+                HistoryPanel(vm, s.id, now)
             } ?: Text("No price for your fuel here.", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
+
+
+@Composable
+private fun HistoryPanel(vm: AppViewModel, stationId: String, now: java.time.Instant) {
+    when (val h = vm.histories[stationId]) {
+        null -> Unit
+        HistoryState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CircularProgressIndicator(Modifier.padding(4.dp)); Text("Loading history…")
+        }
+        is HistoryState.Failed -> Text(h.message, style = MaterialTheme.typography.bodyMedium)
+        is HistoryState.Done -> HistoryBody(h.history, now)
+    }
+}
+
+@Composable
+private fun HistoryBody(h: PriceHistory, now: java.time.Instant) {
+    val days = h.coverage.windowDays
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            h.trend?.let { Formatting.trendHeadline(it, days) } ?: "No $days-day trend yet",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        // A trend is shown only when the whole window was watched; otherwise say exactly why not.
+        h.coverage.reason?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        PriceStepChart(h)
+        Text(
+            "Prices are the provider's own change times. Tank Bear has watched since " +
+                (h.coverage.watchingSince?.let { Formatting.age(it, now) } ?: "never") + ".",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+/** Step chart of recorded prices across the window. The summary is also spoken by screen readers. */
+@Composable
+private fun PriceStepChart(h: PriceHistory) {
+    val pts = h.points
+    val values = pts.mapNotNull { it.pencePerLitre.toDoubleOrNull() }
+    if (values.isEmpty()) { Text("No recorded changes in this window.", style = MaterialTheme.typography.bodyMedium); return }
+    val start = java.time.Instant.parse(h.windowFrom).toEpochMilli().toDouble()
+    val end = java.time.Instant.parse(h.windowTo).toEpochMilli().toDouble()
+    val lo = values.min()
+    val hi = values.max()
+    val range = (hi - lo).coerceAtLeast(0.5)
+    val color = MaterialTheme.colorScheme.primary
+    val summary = "Price history over ${h.coverage.windowDays} days: ${pts.joinToString(", ") { "${it.pencePerLitre}p" }}"
+    Canvas(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(80.dp).semantics { contentDescription = summary }) {
+        fun x(iso: String) = (((java.time.Instant.parse(iso).toEpochMilli() - start) / (end - start)).coerceIn(0.0, 1.0) * size.width).toFloat()
+        fun y(p: String) = (size.height - ((p.toDouble() - lo) / range) * (size.height - 8f) - 4f).toFloat()
+        val path = Path()
+        pts.forEachIndexed { i, p ->
+            if (i == 0) path.moveTo(x(p.at), y(p.pencePerLitre)) else { path.lineTo(x(p.at), y(pts[i - 1].pencePerLitre)); path.lineTo(x(p.at), y(p.pencePerLitre)) }
+        }
+        h.currentPencePerLitre?.let { path.lineTo(size.width, y(it)) }
+        drawPath(path, color, style = Stroke(width = 5f))
+        pts.forEach { drawCircle(color, 7f, Offset(x(it.at), y(it.pencePerLitre))) }
+    }
+    Text("Low ${Formatting.pricePerLitre(trimTrailingZero(lo))} · high ${Formatting.pricePerLitre(trimTrailingZero(hi))}", style = MaterialTheme.typography.bodySmall)
+}
+
+private fun trimTrailingZero(v: Double): String = if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()

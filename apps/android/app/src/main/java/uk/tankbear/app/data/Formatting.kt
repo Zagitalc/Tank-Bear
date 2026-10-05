@@ -64,6 +64,27 @@ object Formatting {
 
     fun metresAsMiles(metres: Int): String = miles(metres.toString())
 
+    /** "4p/L above the local median", exact decimal difference from the backend. */
+    fun versusMedian(diff: String?): String? {
+        val d = diff?.toDoubleOrNull() ?: return null
+        return when {
+            d > 0 -> "${trim(diff)}p/L above the local median"
+            d < 0 -> "${trim(diff.removePrefix("-"))}p/L below the local median"
+            else -> "At the local median"
+        }
+    }
+
+    private fun trim(s: String) = s
+
+    fun trendHeadline(t: HistoryTrend, days: Int): String {
+        val magnitude = t.changePencePerLitre.removePrefix("-")
+        return when (t.direction) {
+            "up" -> "Up ${magnitude}p/L over $days days (from ${t.sincePencePerLitre}p/L)"
+            "down" -> "Down ${magnitude}p/L over $days days (from ${t.sincePencePerLitre}p/L)"
+            else -> "Unchanged over $days days (${t.sincePencePerLitre}p/L)"
+        }
+    }
+
     const val SMALL_DIFFERENCE_PENCE = 20L
     fun isSmallDifference(trueSavingPence: Long) = abs(trueSavingPence) < SMALL_DIFFERENCE_PENCE
 }

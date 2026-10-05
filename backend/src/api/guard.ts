@@ -8,6 +8,7 @@ export const MIN_KEY_LENGTH = 24;
 export const LIMITS = {
   optimisePerCallerPerMinute: 10,
   nearbyPerCallerPerMinute: 60,
+  historyPerCallerPerMinute: 30,
   optimiseGlobalPerHour: 1500,
 } as const;
 
@@ -34,7 +35,7 @@ async function callerBucket(request: Request, key: string): Promise<string> {
   return [...hash.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export type Route = "optimise" | "nearby";
+export type Route = "optimise" | "nearby" | "history";
 
 /**
  * Gate for every /v1 route. Fails closed: with no configured keys, or a limiter fault, nothing is served.
@@ -53,7 +54,7 @@ export async function guard(request: Request, env: Pick<Env, "API_KEYS">, limite
   const hour = Math.floor(now / 3_600_000) * 3600;
   try {
     const caller = await callerBucket(request, supplied);
-    const perCaller = route === "optimise" ? LIMITS.optimisePerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
+    const perCaller = route === "optimise" ? LIMITS.optimisePerCallerPerMinute : route === "history" ? LIMITS.historyPerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
     if ((await limiter.hit(`${route}:${caller}`, minute)) > perCaller) {
       return fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.", { "Retry-After": String(60 - (Math.floor(now / 1000) - minute)) });
     }

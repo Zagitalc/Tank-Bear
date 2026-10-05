@@ -2,6 +2,7 @@ package uk.tankbear.app.ui
 
 import android.app.Application
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -14,6 +15,7 @@ import uk.tankbear.app.data.JourneyRequest
 import uk.tankbear.app.data.JourneyResult
 import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.NearbyResult
+import uk.tankbear.app.data.PriceHistory
 import uk.tankbear.app.data.Places
 import uk.tankbear.app.data.SavedPlace
 import uk.tankbear.app.data.Mode
@@ -40,6 +42,12 @@ sealed interface NearbyState {
 
 enum class NearbySort { Closest, Cheapest }
 
+sealed interface HistoryState {
+    data object Loading : HistoryState
+    data class Done(val history: PriceHistory) : HistoryState
+    data class Failed(val message: String) : HistoryState
+}
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
 
@@ -58,6 +66,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var search by mutableStateOf<SearchState>(SearchState.Idle)
         private set
     private var job: Job? = null
+
+    /** History panels the person has opened, by station id. Held in memory only. */
+    val histories = mutableStateMapOf<String, HistoryState>()
+
+    fun toggleHistory(stationId: String) {
+        if (histories.containsKey(stationId)) { histories.remove(stationId); return }
+        if (saved.appKey.isBlank()) { histories[stationId] = HistoryState.Failed("Add the app key in Settings."); return }
+        histories[stationId] = HistoryState.Loading
+        viewModelScope.launch {
+            histories[stationId] = when (val o = OptimiseClient(saved.baseUrl, saved.appKey).history(stationId, saved.fuel)) {
+                is ApiOutcome.HistoryOk -> HistoryState.Done(o.history)
+                is ApiOutcome.Failure -> HistoryState.Failed(o.message)
+                else -> HistoryState.Failed("Couldn't load history.")
+            }
+        }
+    }
 
     var nearby by mutableStateOf<NearbyState>(NearbyState.Idle)
         private set
@@ -142,7 +166,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             nearby = when (val outcome = OptimiseClient(saved.baseUrl, saved.appKey).nearby(origin, saved.fuel, litres)) {
                 is ApiOutcome.NearbyOk -> NearbyState.Done(outcome.result, java.time.Instant.now())
                 is ApiOutcome.Failure -> NearbyState.Failed(outcome)
-                is ApiOutcome.Ok -> NearbyState.Idle
+                is ApiOutcome.Ok, is ApiOutcome.HistoryOk -> NearbyState.Idle
             }
         }
     }
@@ -169,7 +193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     SearchState.Done(outcome, java.time.Instant.now())
                 }
                 is ApiOutcome.Failure -> SearchState.Failed(outcome)
-                is ApiOutcome.NearbyOk -> SearchState.Idle
+                is ApiOutcome.NearbyOk, is ApiOutcome.HistoryOk -> SearchState.Idle
             }
         }
     }
