@@ -202,3 +202,11 @@ run is untested. `GET /v1/stations/nearby` (`lat`, `lon`, optional
 prices, temporary-closure flags and feed health kept apart from price age.
 Permanently closed stations are excluded. It makes no opening-hours or routing
 claims. Tests run the real migration on SQLite through a D1 shim, not on D1 itself.
+
+## Observed: User-Agent required (5 October 2026)
+
+`POST /api/v1/oauth/generate_access_token` returned HTTP 403 for a request with no
+`User-Agent` header (curl with the header removed, and a local Worker, whose `fetch`
+sends none) and HTTP 200 with any non-empty value. Not documented by the provider.
+The client now always sends `TankBear/0.1 (+https://github.com/Zagitalc/Tank-Bear)`.
+Whether Cloudflare's production egress is accepted by the provider remains untested.

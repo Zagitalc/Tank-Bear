@@ -151,14 +151,14 @@ test("a feed mostly made of malformed records is not a complete refresh", () => 
 // --- client ---------------------------------------------------------------
 
 function harness(responses: Array<() => Response | Promise<Response>>) {
-  const log: Array<{ url: string; auth: string | null; at: number }> = [];
+  const log: Array<{ url: string; auth: string | null; at: number; ua: string | null }> = [];
   let clock = 0;
   let i = 0;
   const client = createFuelFinderClient({ clientId: "id", clientSecret: "secret" }, {
     now: () => clock,
     sleep: async (ms) => { clock += ms; },
     fetch: (async (url: string, init?: RequestInit) => {
-      log.push({ url: String(url), auth: new Headers(init?.headers).get("authorization"), at: clock });
+      log.push({ url: String(url), auth: new Headers(init?.headers).get("authorization"), at: clock, ua: new Headers(init?.headers).get("user-agent") });
       const next = responses[i++];
       if (!next) throw new Error("unexpected request");
       return next();
@@ -175,6 +175,7 @@ test("client reuses one token, paces requests and sends the batch number", async
   assert.equal(log.filter((l) => l.url.includes("generate_access_token")).length, 1);
   assert.match(log[2]!.url, /\/api\/v1\/pfs\?batch-number=2$/);
   assert.equal(log[2]!.auth, "Bearer T");
+  assert.ok(log.every((l) => /^TankBear\//.test(l.ua ?? "")), "every request names the client; Fuel Finder 403s without a User-Agent");
   assert.ok(log[1]!.at - log[0]!.at >= 750 && log[2]!.at - log[1]!.at >= 750);
 });
 
