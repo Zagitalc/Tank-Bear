@@ -34,6 +34,9 @@ data class Candidate(
     val referenceDetourFuelCostPence: Long,
     val trueSavingPence: Long,
     val worseThanBestPence: Long,
+    val position: LatLon,
+    /** Encoded polyline (6 digits) of the whole origin-station-destination route. */
+    val routeGeometry: String,
 )
 
 data class JourneyResult(
@@ -48,6 +51,8 @@ data class JourneyResult(
     val cheapestPumpId: String?,
     val smallestDetourId: String?,
     val candidates: List<Candidate>,
+    /** Encoded polyline (6 digits) of the baseline route; null in fuel-trip mode. */
+    val baselineGeometry: String?,
 )
 
 enum class FailureKind { Network, Unauthorised, RateLimited, NoRoute, NoData, Invalid, Server }

@@ -11,11 +11,15 @@ import kotlinx.coroutines.launch
 import uk.tankbear.app.data.ApiOutcome
 import uk.tankbear.app.data.FuelType
 import uk.tankbear.app.data.JourneyRequest
+import uk.tankbear.app.data.JourneyResult
+import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.Mode
 import uk.tankbear.app.data.OptimiseClient
 import uk.tankbear.app.data.Prefs
 import uk.tankbear.app.data.Saved
 import uk.tankbear.app.data.Validation
+
+enum class MapTarget { Start, Destination }
 
 sealed interface SearchState {
     data object Idle : SearchState
@@ -42,6 +46,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var search by mutableStateOf<SearchState>(SearchState.Idle)
         private set
     private var job: Job? = null
+
+    /** What a long-press on the map sets. */
+    var mapTarget by mutableStateOf(MapTarget.Start)
+    var selectedStationId by mutableStateOf<String?>(null)
+        private set
+    /** Bumped whenever a new result arrives, so the map re-fits to it once. */
+    var fitCount by mutableStateOf(0)
+        private set
+
+    val result: JourneyResult? get() = (search as? SearchState.Done)?.outcome?.result
+
+    fun setFromMap(point: LatLon) {
+        val lat = "%.5f".format(java.util.Locale.UK, point.lat)
+        val lon = "%.5f".format(java.util.Locale.UK, point.lon)
+        if (mapTarget == MapTarget.Start || mode == Mode.FuelTrip) { originLat = lat; originLon = lon } else { destLat = lat; destLon = lon }
+    }
+
+    fun selectStation(id: String) { selectedStationId = id }
 
     init {
         viewModelScope.launch {
@@ -75,7 +97,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         search = SearchState.Loading
         job = viewModelScope.launch {
             search = when (val outcome = OptimiseClient(saved.baseUrl, saved.appKey).optimise(request)) {
-                is ApiOutcome.Ok -> SearchState.Done(outcome, java.time.Instant.now())
+                is ApiOutcome.Ok -> {
+                    selectedStationId = outcome.result.candidates.firstOrNull()?.stationId
+                    fitCount++
+                    SearchState.Done(outcome, java.time.Instant.now())
+                }
                 is ApiOutcome.Failure -> SearchState.Failed(outcome)
             }
         }

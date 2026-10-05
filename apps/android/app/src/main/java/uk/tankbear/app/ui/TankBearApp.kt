@@ -29,6 +29,7 @@ import uk.tankbear.app.ui.theme.TankBearTheme
 
 private enum class Destination(@StringRes val label: Int, @DrawableRes val icon: Int) {
     Find(R.string.find, R.drawable.ic_find),
+    Map(R.string.map, R.drawable.ic_map),
     Car(R.string.car, R.drawable.ic_car),
     Settings(R.string.settings, R.drawable.ic_settings),
 }
@@ -52,20 +53,24 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                 }
             },
         ) { padding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyLarge)
-                when (selected) {
-                    Destination.Find -> FindScreen(vm)
-                    Destination.Car -> CarScreen(vm)
-                    Destination.Settings -> SettingsScreen(vm)
+            if (selected == Destination.Map) {
+                MapScreen(vm, Modifier.padding(padding))
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
+                    Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyLarge)
+                    when (selected) {
+                        Destination.Find -> FindScreen(vm, onShowOnMap = { selected = Destination.Map })
+                        Destination.Car -> CarScreen(vm)
+                        else -> SettingsScreen(vm)
+                    }
                 }
             }
         }

@@ -15,6 +15,7 @@ import uk.tankbear.app.data.JourneyRequest
 import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.Mode
 import uk.tankbear.app.data.OptimiseClient
+import uk.tankbear.app.data.Polyline
 import uk.tankbear.app.data.ResultParser
 import uk.tankbear.app.data.Validation
 
@@ -93,5 +94,25 @@ class DataTest {
         assertNull(Validation.mpg("4.5.1"))
         assertEquals("30", Validation.litres("30"))
         assertNull(Validation.litres("501"))
+    }
+
+    @Test fun routeGeometryDecodesToTheRealJourneyPoints() {
+        val r = ResultParser.parse(sample)
+        val base = Polyline.decode(r.baselineGeometry!!)
+        assertEquals(2, base.size)
+        assertEquals(51.45, base.first().lat, 1e-6)
+        assertEquals(-0.97, base.first().lon, 1e-6)
+        assertEquals(51.75, base.last().lat, 1e-6)
+        val via = r.candidates.first()
+        val route = Polyline.decode(via.routeGeometry)
+        assertEquals(3, route.size)
+        assertEquals(via.position.lat, route[1].lat, 1e-6)
+        assertEquals(via.position.lon, route[1].lon, 1e-6)
+    }
+
+    @Test fun badPolylinesAreEmptyNotCrashes() {
+        assertTrue(Polyline.decode("").isEmpty())
+        assertTrue(Polyline.decode("~").isEmpty())
+        assertTrue(Polyline.decode("a b").isEmpty())
     }
 }
