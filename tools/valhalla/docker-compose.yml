@@ -1,0 +1,17 @@
+# Local routing benchmark only. First start downloads the Great Britain OSM extract
+# (about 2 GB) from Geofabrik and builds the graph (tens of minutes, several GB of disk).
+# Nothing here is production hosting. Northern Ireland needs a separate extract.
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./data:/custom_files
+    environment:
+      tile_urls: "https://download.geofabrik.de/europe/great-britain-latest.osm.pbf"
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "4"
