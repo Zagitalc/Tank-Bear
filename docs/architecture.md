@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Stage 0 approved; Stage 1 reviewed; Stage 2 implemented for review.
+Status: Stages 0–2 reviewed; Stage 3 authorised, contract/access gate in progress.
 
 ## Product boundary
 
@@ -72,7 +72,7 @@ has its own code and storage configuration.
 
 1. Skeleton (reviewed): Android build, navigation, backend health, local
    configuration, tests and setup documentation.
-2. Economics (ready for review): pure, precisely specified calculations and
+2. Economics (reviewed): pure, precisely specified calculations and
    ranking with fixtures. See `calculations.md` for rounding and exclusion rules.
 3. Ingestion: verify official contract and terms, then current/history storage,
    validation, refresh health, and nearby queries.

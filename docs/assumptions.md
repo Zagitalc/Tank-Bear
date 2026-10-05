@@ -1,7 +1,8 @@
 # Approved assumptions and open decisions
 
-The user approved the Stage 0 proposal, reviewed the Stage 1 Android shell, and
-authorised Stage 2. Stage 3 has not been authorised.
+The user approved Stage 0, reviewed the Stage 1 Android shell and Stage 2
+economics demo, and authorised Stage 3. Stage 3 contract research has started;
+live integration awaits credentials and resolution of documentation gaps.
 
 ## Approved direction
 
