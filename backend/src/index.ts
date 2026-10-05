@@ -1,5 +1,6 @@
 import { healthResponse } from "./api/health.ts";
 import { nearbyResponse } from "./api/nearby.ts";
+import { optimiseResponse, routingProvider } from "./api/optimise.ts";
 import type { Env } from "./env.ts";
 import { createFuelFinderClient } from "./ingestion/client.ts";
 import { runRefresh } from "./ingestion/run.ts";
@@ -14,6 +15,15 @@ export default {
       return request.method === "HEAD"
         ? new Response(null, { status: response.status, headers: response.headers })
         : response;
+    }
+    if (url.pathname === "/v1/journeys/optimise") {
+      if (request.method !== "POST") {
+        return Response.json(
+          { error: { code: "METHOD_NOT_ALLOWED", message: "Use POST." } },
+          { status: 405, headers: { Allow: "POST", "Cache-Control": "no-store" } },
+        );
+      }
+      return optimiseResponse(request, createFuelRepository(env.DB), routingProvider(env));
     }
     if (url.pathname !== "/health") {
       return Response.json(

@@ -43,8 +43,11 @@ export interface JourneyOptions {
   mode: "along_journey" | "fuel_trip";
   origin: Coordinates;
   destination?: Coordinates;
-  /** Already shortlisted, best first: only the first MAX_CANDIDATES are routed. */
-  stations: readonly StationStop[];
+  /**
+   * Already shortlisted, best first: only the first MAX_CANDIDATES are routed. May be a function
+   * so the shortlist can depend on the baseline route (called once, after the baseline succeeds).
+   */
+  stations: readonly StationStop[] | ((baseline: { route: RouteTotals; geometry: string } | null) => Promise<readonly StationStop[]>);
   maxCandidates?: number;
   /** Absolute epoch ms after which no new routes are started. */
   deadline?: number;
@@ -57,7 +60,7 @@ export interface JourneyOptions {
  * Failed stations are reported, never costed as zero detours, and no straight-line estimate is used.
  */
 export async function routeJourney(provider: RoutingProvider, options: JourneyOptions): Promise<JourneyRouting> {
-  const { mode, origin, stations } = options;
+  const { mode, origin } = options;
   const now = options.now ?? Date.now;
   const maybeDestination = mode === "along_journey" ? options.destination : origin;
   if (!maybeDestination) throw new Error("along_journey requires a destination");
@@ -75,6 +78,7 @@ export async function routeJourney(provider: RoutingProvider, options: JourneyOp
     baseline = { route: outcome.path.totals, geometry: outcome.path.geometry };
   }
 
+  const stations = typeof options.stations === "function" ? await options.stations(baseline) : options.stations;
   const attempt = stations.slice(0, cap);
   const unrouted: { stationId: string; reason: UnroutedReason }[] =
     stations.slice(cap).map((s) => ({ stationId: s.stationId, reason: "not_attempted_over_cap" }));
