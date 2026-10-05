@@ -1,2 +1,7 @@
-# Stage 1 requires no secrets. Do not put credentials in wrangler.jsonc.
-# Fuel Finder and routing configuration will be added only with verified adapters.
+# Copy to .dev.vars for local Cloudflare Workers secrets.
+# Never put credentials in wrangler.jsonc, source code or chat.
+# Tank Bear configuration names; the Fuel Finder adapter is not connected yet.
+FUEL_FINDER_CLIENT_ID=""
+FUEL_FINDER_CLIENT_SECRET=""
+# test or live, matching the issued credentials.
+FUEL_FINDER_ENVIRONMENT=""

@@ -1,6 +1,6 @@
 # Data sources
 
-Status: research only. No upstream data is connected in Stage 1.
+Status: Stage 3 official contract research started. No upstream data connected.
 
 ## UK Government Fuel Finder
 
@@ -9,12 +9,13 @@ It confirms prices by fuel type, forecourt details, amenities/opening hours,
 update timestamps, authenticated OAuth client-credentials API access and
 twice-daily CSV availability. Onboarding requires GOV.UK One Login.
 
-The [official developer portal](https://www.developer.fuel-finder.service.gov.uk/public-api)
-returned HTTP 403 during Stage 0 research. Exact response fields, coordinate
-semantics, grades, price precision, timezone, paging, deltas, deletions, quotas,
-licensing/attribution, history retention and redistribution remain unverified.
-No unofficial schema is treated as authoritative. Do not create the live adapter
-until these details are verified. Retail website scraping is not planned.
+The [official developer portal](https://www.developer.fuel-finder.service.gov.uk/fuel-finder/public-api)
+returned HTTP 403 to the web research tool, but opened in the local browser on
+5 October 2026. Official endpoint samples, fields guide, authentication and
+developer guidelines were inspected. See [Stage 3 contract findings](fuel-finder-contract.md)
+for verified details, contradictory examples and outstanding gates. Live credentials
+are configured locally and authentication/first-batch smoke checks passed. The pagination end rule is recorded as observed
+evidence (not official) and the adapter is built on it, with guards. Retail website scraping is not planned.
 
 ## Provenance and freshness
 
