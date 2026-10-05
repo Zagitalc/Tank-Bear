@@ -1,6 +1,7 @@
 # Routing method
 
-Status: planned for Stage 4. No routes are requested in Stage 1.
+Status: Stage 4 adapter built and fixture-tested. No routing engine is hosted, no
+live route has been requested, and nothing is exposed over HTTP.
 
 Preferred engine: [Valhalla](https://valhalla.github.io/valhalla/api/route/api-reference/),
 subject to a UK access/quality benchmark and a hosting decision. OSRM is the
@@ -55,3 +56,37 @@ observations. Do not persist a user's journey history by default.
 Urban/rural routes, opposite motorway services, divided roads, duplicate source
 records, Northern Ireland, coastal/island coverage, unexpected ferries, no route,
 unreachable stations, huge detours and nearly identical origin/destination.
+
+## Stage 4 implementation (`backend/src/routing/`)
+
+- `types.ts`: `RoutingProvider` port. Outcomes are `ok`, `no_route` (engine says the
+  stops cannot be connected) or `error` (timeout, throttling, 5xx, unexpected shape).
+- `valhalla.ts`: POST `/route`, `costing: auto`, kilometres, every stop a `break` so
+  the station is a real stop with its own leg. Distance becomes whole metres, time whole
+  seconds, and ferry/toll flags are required. The request and response mapping follows
+  the published route reference. On 5 October 2026 `npm run smoke:routing` ran it against a
+  local Valhalla 3.9.0 (the container from the Spirited project, graph dated 2 October, labelled
+  `spirited-2026-10-02`): Reading to Oxford baseline 42.5 km / 59 min, a near-route station
+  +1.2 km, an off-route one +42 km, and a point at sea returned HTTP 400 code 171 (now mapped to
+  `no_route`). This is a smoke check on three stations, not a benchmark; the difficult cases
+  below are unchecked. The graph version comes
+  from configuration because the route response does not carry one.
+- Snapping: the route response does not report snap distance, so the adapter compares
+  each requested stop with where the decoded geometry starts or ends. Stations more than
+  150 m from the road path (or any stop beyond 300 m) are reported `snap_too_far`. These
+  thresholds are provisional and cannot detect a snap to the wrong carriageway that is
+  close in distance.
+- `journey.ts`: along journey routes A to B once, then A to station to B per station;
+  fuel trip routes A to station to A with no baseline. Hard cap 12 stations (13 calls),
+  concurrency 3, optional deadline. A baseline failure stops everything. Stations that
+  fail, cannot be reached, snap badly or return a different routing context are listed
+  in `unrouted` and never costed as zero detours; status is `partial`. No straight-line
+  fallback exists.
+- `cache.ts`: bounded, short-lived, in memory, keyed by exact full-precision stops and
+  routing context. Errors are not cached. Nothing is persisted.
+- Ferry and toll flags pass through to the economics engine, which already excludes such
+  routes. Negative route differences remain the economics engine's strict hold-for-review
+  rule; routing makes no clamping decision.
+
+Not done: candidate shortlisting from D1 (Stage 5), hosting and benchmarking a real
+engine, the difficult-case benchmark list above, and the optimisation endpoint.

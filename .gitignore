@@ -16,3 +16,6 @@ dist/
 local.properties
 *.jks
 *.keystore
+
+# Local Valhalla graph and OSM extract
+tools/valhalla/data/
