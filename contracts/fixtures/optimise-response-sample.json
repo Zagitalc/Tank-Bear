@@ -1,0 +1,185 @@
+{
+  "calculationVersion": "1",
+  "mode": "along_journey",
+  "status": "ranked",
+  "scope": "Best among the stations checked.",
+  "coverage": {
+    "stationsInSearchArea": 3,
+    "stationsRouted": 3,
+    "routingCalls": 4,
+    "partial": false,
+    "notRouted": [],
+    "excludedByLimits": []
+  },
+  "routing": {
+    "provider": "example",
+    "graphVersion": "v1"
+  },
+  "feed": {
+    "source": "Fuel Finder",
+    "lastSuccessfulRefreshAt": "2026-10-05T11:50:00.000Z"
+  },
+  "baseline": {
+    "route": {
+      "distanceMetres": "38559",
+      "durationSeconds": "2142",
+      "contextId": "example|v1",
+      "usesFerry": false,
+      "usesToll": false
+    },
+    "geometry": "..."
+  },
+  "reference": {
+    "stationId": "station-a",
+    "selection": "smallest_added_driving_time"
+  },
+  "labels": {
+    "bestOverallStationId": "station-b",
+    "cheapestPumpStationId": "station-b",
+    "smallestDetourStationId": "station-a"
+  },
+  "candidates": [
+    {
+      "stationId": "station-b",
+      "name": "Example Garage Off Route",
+      "rank": 1,
+      "price": {
+        "fuelType": "E10",
+        "pencePerLitre": "128.9",
+        "source": "Fuel Finder",
+        "sourceUpdatedAt": "2026-10-03T08:00:00.000Z",
+        "fetchedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "route": {
+        "distanceMetres": "38608",
+        "durationSeconds": "2145",
+        "contextId": "example|v1",
+        "usesFerry": false,
+        "usesToll": false
+      },
+      "detourDistanceMetres": "49",
+      "detourDurationSeconds": "3",
+      "detourMiles": "0.030447188",
+      "detourFuelLitres": "0.003075904",
+      "fillCostPence": 3867,
+      "detourFuelCostPence": 0,
+      "comparisonCostPence": 3867,
+      "costRoundingAdjustmentPence": 0,
+      "pumpSavingPence": 420,
+      "referenceDetourFuelCostPence": 0,
+      "trueSavingPence": 420,
+      "savingRoundingAdjustmentPence": 0,
+      "worseThanBestPence": 0,
+      "cashComparison": "lower_cost",
+      "station": {
+        "id": "station-b",
+        "name": "Example Garage Off Route",
+        "position": {
+          "lat": 51.618,
+          "lon": -1.1099999999999999
+        }
+      },
+      "priceSource": {
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "routeGeometry": "...",
+      "stationSnapMetres": 3
+    },
+    {
+      "stationId": "station-c",
+      "name": "Example Supermarket Fuel",
+      "rank": 2,
+      "price": {
+        "fuelType": "E10",
+        "pencePerLitre": "131.9",
+        "source": "Fuel Finder",
+        "sourceUpdatedAt": "2026-10-03T08:00:00.000Z",
+        "fetchedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "route": {
+        "distanceMetres": "38562",
+        "durationSeconds": "2142",
+        "contextId": "example|v1",
+        "usesFerry": false,
+        "usesToll": false
+      },
+      "detourDistanceMetres": "3",
+      "detourDurationSeconds": "0",
+      "detourMiles": "0.001864114",
+      "detourFuelLitres": "0.000188321",
+      "fillCostPence": 3957,
+      "detourFuelCostPence": 0,
+      "comparisonCostPence": 3957,
+      "costRoundingAdjustmentPence": 0,
+      "pumpSavingPence": 330,
+      "referenceDetourFuelCostPence": 0,
+      "trueSavingPence": 330,
+      "savingRoundingAdjustmentPence": 0,
+      "worseThanBestPence": 90,
+      "cashComparison": "lower_cost",
+      "station": {
+        "id": "station-c",
+        "name": "Example Supermarket Fuel",
+        "position": {
+          "lat": 51.514,
+          "lon": -1.026
+        }
+      },
+      "priceSource": {
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "routeGeometry": "...",
+      "stationSnapMetres": 3
+    },
+    {
+      "stationId": "station-a",
+      "name": "Example Services North",
+      "rank": 3,
+      "price": {
+        "fuelType": "E10",
+        "pencePerLitre": "142.9",
+        "source": "Fuel Finder",
+        "sourceUpdatedAt": "2026-10-03T08:00:00.000Z",
+        "fetchedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "route": {
+        "distanceMetres": "38559",
+        "durationSeconds": "2142",
+        "contextId": "example|v1",
+        "usesFerry": false,
+        "usesToll": false
+      },
+      "detourDistanceMetres": "0",
+      "detourDurationSeconds": "0",
+      "detourMiles": "0",
+      "detourFuelLitres": "0",
+      "fillCostPence": 4287,
+      "detourFuelCostPence": 0,
+      "comparisonCostPence": 4287,
+      "costRoundingAdjustmentPence": 0,
+      "pumpSavingPence": 0,
+      "referenceDetourFuelCostPence": 0,
+      "trueSavingPence": 0,
+      "savingRoundingAdjustmentPence": 0,
+      "worseThanBestPence": 420,
+      "cashComparison": "equal_cost",
+      "station": {
+        "id": "station-a",
+        "name": "Example Services North",
+        "position": {
+          "lat": 51.6,
+          "lon": -1.1099999999999999
+        }
+      },
+      "priceSource": {
+        "priceLastUpdated": "2026-10-03T08:00:00.000Z",
+        "feedLastCheckedAt": "2026-10-05T11:50:00.000Z"
+      },
+      "routeGeometry": "...",
+      "stationSnapMetres": 3
+    }
+  ],
+  "excluded": []
+}

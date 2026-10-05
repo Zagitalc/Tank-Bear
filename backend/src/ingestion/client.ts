@@ -4,6 +4,11 @@ export const FUEL_FINDER_BASE_URL = "https://www.fuel-finder.service.gov.uk";
 /** Live quota is 100 requests/minute with one concurrent request; stay near 80. */
 export const MIN_REQUEST_GAP_MS = 750;
 const MAX_ATTEMPTS = 3;
+/**
+ * Fuel Finder answers HTTP 403 to requests with no User-Agent (observed 5 October 2026 with curl
+ * and from a local Worker, whose fetch sends none). Always identify the client explicitly.
+ */
+export const USER_AGENT = "TankBear/0.1 (+https://github.com/Zagitalc/Tank-Bear)";
 
 export interface FuelFinderCredentials {
   clientId: string;
@@ -44,7 +49,7 @@ export function createFuelFinderClient(credentials: FuelFinderCredentials, deps:
     if (token && token.expiresAt - 60_000 > deps.now()) return token.value;
     const response = await paced(`${base}/api/v1/oauth/generate_access_token`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json", "user-agent": USER_AGENT },
       body: JSON.stringify({ client_id: credentials.clientId, client_secret: credentials.clientSecret }),
     });
     if (!response.ok) throw new FuelFinderAuthError(`token request failed with HTTP ${response.status}`);
@@ -63,7 +68,7 @@ export function createFuelFinderClient(credentials: FuelFinderCredentials, deps:
       try {
         const bearer = await accessToken();
         response = await paced(`${base}${path}?batch-number=${batch}`, {
-          headers: { authorization: `Bearer ${bearer}`, accept: "application/json" },
+          headers: { authorization: `Bearer ${bearer}`, accept: "application/json", "user-agent": USER_AGENT },
         });
       } catch (error) {
         if (error instanceof FuelFinderAuthError) return { kind: "error", reason: error.message };

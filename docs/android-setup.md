@@ -51,3 +51,24 @@ storage is added until the corresponding stage.
 The wrapper files are standard Gradle 8.11.1 distribution files, licensed under
 Apache-2.0. The JAR SHA256 was checked against Gradle's published checksum:
 `2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046`.
+
+## Stage 6: journey screens
+
+Find (coordinates for start and destination, along-journey or fuel-trip), Car (fuel type,
+Imperial MPG, litres, saved with DataStore on the phone only) and Settings (server address and
+app key, development only). Results come from `POST /v1/journeys/optimise`; the list is complete
+without a map. Not built: map selection, location, route overlay, saved places.
+
+```sh
+cd apps/android
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+```
+
+The unit tests parse `contracts/fixtures/optimise-response-sample.json`, a synthetic response
+with invented stations. For a live run: start the backend (`npm run dev --workspace backend`
+with `API_KEYS`, `ROUTING_BASE_URL` and `ROUTING_GRAPH_VERSION` set, e.g. `--var` flags), load
+fuel data by calling `/cdn-cgi/handler/scheduled` on a `--test-scheduled` dev server, install the
+debug build, and enter the key in Settings. The emulator reaches your computer at
+`http://10.0.2.2:8787`; cleartext HTTP is allowed in debug builds for that address only.
+If the emulator reports "No activity found" or `/sdcard` errors, cold-boot it
+(`-no-snapshot-load`); a half-broken emulator also fails the navigation test.
