@@ -97,3 +97,13 @@ Not built: current location, saved places, a route for stations the API did not 
 - **Nearby**: a third mode that lists the closest stations within about 3 miles with distance, opening status,
   price age and the fill cost for your fuel and litres (computed by the backend). It makes no journey claims.
   Sort by closest or cheapest. Not drawn on the map yet.
+
+## Instrumentation tests
+
+`./gradlew :app:connectedDebugAndroidTest` runs five tests on a device or emulator: tab navigation and recreation (all four
+tabs), the fields each mode shows, a clear message when MPG is missing (no network call), saved places (needs a start,
+then saved and removed), and the Map tab's first-run state. Saved places persist on the device, so a `@Before` step removes
+any before each test. The tests do not talk to the backend. Map long-press is not covered by an automated test (it needs
+the real map view); it was checked by hand with `adb shell input swipe x y x y 1200` on 5 October 2026: one press set the
+start and, after choosing the Destination chip, another set the destination, and both appeared on the Find tab.
+If the emulator reports "No activity found" or `/sdcard` errors, cold-boot it first.
