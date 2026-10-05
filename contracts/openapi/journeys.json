@@ -35,7 +35,9 @@
           { "name": "lat", "in": "query", "required": true, "schema": { "type": "number", "minimum": 49, "maximum": 61 } },
           { "name": "lon", "in": "query", "required": true, "schema": { "type": "number", "minimum": -9, "maximum": 2.5 } },
           { "name": "radiusMetres", "in": "query", "schema": { "type": "integer", "minimum": 100, "maximum": 25000, "default": 5000 } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } }
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
+          { "name": "fuelType", "in": "query", "schema": { "enum": ["E10", "B7"] }, "description": "With litres, adds a per-station fill object (null when that grade has no price)." },
+          { "name": "litres", "in": "query", "schema": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$" }, "description": "1 to 500. Required with fuelType." }
         ],
         "responses": {
           "200": { "description": "Stations closest first. Feed health is separate from price age.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NearbyResponse" } } } },
@@ -76,7 +78,7 @@
           "mode": { "enum": ["along_journey", "fuel_trip"] },
           "status": { "enum": ["ranked", "no_candidates"] },
           "scope": { "type": "string" },
-          "coverage": { "type": "object", "required": ["stationsInSearchArea", "stationsRouted", "routingCalls", "partial", "notRouted", "excludedByLimits"] },
+          "coverage": { "type": "object", "required": ["stationsInSearchArea", "closedNowExcluded", "stationsRouted", "routingCalls", "partial", "notRouted", "excludedByLimits"] },
           "routing": { "type": "object", "required": ["provider", "graphVersion"] },
           "feed": { "type": "object", "required": ["source", "lastSuccessfulRefreshAt"] },
           "baseline": { "type": ["object", "null"] },
@@ -88,14 +90,14 @@
       },
       "RankedCandidate": {
         "type": "object",
-        "required": ["stationId", "name", "rank", "price", "route", "detourDistanceMetres", "detourDurationSeconds", "fillCostPence", "detourFuelCostPence", "comparisonCostPence", "pumpSavingPence", "referenceDetourFuelCostPence", "trueSavingPence", "station", "priceSource", "routeGeometry", "stationSnapMetres"]
+        "required": ["stationId", "name", "rank", "price", "route", "detourDistanceMetres", "detourDurationSeconds", "fillCostPence", "detourFuelCostPence", "comparisonCostPence", "pumpSavingPence", "referenceDetourFuelCostPence", "trueSavingPence", "station", "priceSource", "routeGeometry", "stationSnapMetres", "opening"]
       },
       "NearbyResponse": {
         "type": "object",
         "required": ["feed", "stations"],
         "properties": {
           "feed": { "type": "object", "required": ["source", "lastCheckedAt", "lastSuccessfulRefreshAt", "lastStatus"] },
-          "stations": { "type": "array", "items": { "type": "object", "required": ["id", "name", "position", "distanceMetres", "temporaryClosure", "isMotorway", "prices"] } }
+          "stations": { "type": "array", "items": { "type": "object", "required": ["id", "name", "position", "distanceMetres", "temporaryClosure", "isMotorway", "opening", "prices"] } }
         }
       }
     }

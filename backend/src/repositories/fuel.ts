@@ -1,6 +1,7 @@
 import type { CurrentState, RefreshDiff, StoredPrice } from "../ingestion/diff.ts";
 import { priceKey } from "../ingestion/diff.ts";
 import type { Station } from "../ingestion/records.ts";
+import { parseWeek, serialiseWeek } from "../opening/status.ts";
 
 export const FEED = "fuel-finder-national";
 const CHUNK = 50; // statements per D1 batch
@@ -105,12 +106,13 @@ export function createFuelRepository(db: D1Database): FuelRepository {
       for (const s of diff.stationUpserts) {
         st.push(db.prepare(
           `INSERT INTO stations (node_id, trading_name, brand_name, postcode, latitude, longitude, temporary_closure,
-             permanent_closure, is_motorway, is_supermarket, first_seen_at, updated_at)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?11)
+             permanent_closure, is_motorway, is_supermarket, first_seen_at, updated_at, opening_hours)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?11,?12)
            ON CONFLICT(node_id) DO UPDATE SET trading_name=?2, brand_name=?3, postcode=?4, latitude=?5, longitude=?6,
-             temporary_closure=?7, permanent_closure=?8, is_motorway=?9, is_supermarket=?10, updated_at=?11`,
+             temporary_closure=?7, permanent_closure=?8, is_motorway=?9, is_supermarket=?10, updated_at=?11, opening_hours=?12`,
         ).bind(s.nodeId, s.tradingName, s.brandName, s.postcode, s.latitude, s.longitude, flag(s.temporaryClosure),
-          flag(s.permanentClosure), flag(s.isMotorway), flag(s.isSupermarket), observedAt));
+          flag(s.permanentClosure), flag(s.isMotorway), flag(s.isSupermarket), observedAt,
+          s.openingHours ? serialiseWeek(s.openingHours) : null));
       }
       for (const { nodeId, price: p } of diff.priceChanges) {
         st.push(db.prepare(
@@ -193,7 +195,13 @@ function rowToStation(r: Record<string, unknown>): Station {
     latitude: Number(r.latitude), longitude: Number(r.longitude),
     temporaryClosure: Boolean(r.temporary_closure), permanentClosure: Boolean(r.permanent_closure),
     isMotorway: Boolean(r.is_motorway), isSupermarket: Boolean(r.is_supermarket),
+    openingHours: readWeek(r.opening_hours),
   };
+}
+
+function readWeek(value: unknown) {
+  if (typeof value !== "string") return null;
+  try { return parseWeek(JSON.parse(value)); } catch { return null; }
 }
 
 export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {

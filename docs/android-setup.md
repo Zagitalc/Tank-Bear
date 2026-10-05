@@ -83,3 +83,17 @@ shows your start and destination pins, the direct route (grey), the route throug
 visible. OpenFreeMap has no uptime guarantee; replace the style address with a supported or self-hosted
 source before a public release (see docs/data-sources.md). Map selection needs internet for tiles.
 Not built: current location, saved places, a route for stations the API did not rank.
+
+## Stage 7: location, saved places, opening hours, Nearby
+
+- **Use my location** (Find tab): asks for location only when tapped, accepts approximate or precise, reads one
+  position and keeps nothing. Denial leaves a message and an "Open app settings" link; entering coordinates still works.
+  Checked on the emulator: denial message, approximate-only grant (coordinates filled, visibly fuzzed).
+- **Saved places**: up to 8 named coordinates stored on the phone only (DataStore, excluded from backup). Use as start or
+  destination, remove, or save the current start or destination. Survived an app restart.
+- **Opening hours**: from the feed's usual weekly hours. Bank holiday hours are ignored. Journeys leave out stations
+  closed right now (and say how many); unknown hours stay in, labelled. "Open" at the time of the search is not a
+  promise about arrival time.
+- **Nearby**: a third mode that lists the closest stations within about 3 miles with distance, opening status,
+  price age and the fill cost for your fuel and litres (computed by the backend). It makes no journey claims.
+  Sort by closest or cheapest. Not drawn on the map yet.

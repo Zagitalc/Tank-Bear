@@ -2,6 +2,8 @@ package uk.tankbear.app.data
 
 import org.json.JSONObject
 
+private fun JSONObject.nullableString(key: String): String? = if (isNull(key) || !has(key)) null else getString(key)
+
 /** Maps the backend's optimise response. Money arrives as whole pence, prices as decimal strings. */
 object ResultParser {
     fun parse(json: String): JourneyResult {
@@ -29,6 +31,7 @@ object ResultParser {
                 worseThanBestPence = c.getLong("worseThanBestPence"),
                 position = c.getJSONObject("station").getJSONObject("position").let { LatLon(it.getDouble("lat"), it.getDouble("lon")) },
                 routeGeometry = c.getString("routeGeometry"),
+                opening = opening(c.optJSONObject("opening")),
             )
         }
         return JourneyResult(
@@ -36,6 +39,7 @@ object ResultParser {
             scope = o.getString("scope"),
             stationsInSearchArea = coverage.getInt("stationsInSearchArea"),
             stationsRouted = coverage.getInt("stationsRouted"),
+            closedNowExcluded = coverage.optInt("closedNowExcluded", 0),
             partial = coverage.getBoolean("partial"),
             feedLastSuccessfulRefresh = o.getJSONObject("feed").getString("lastSuccessfulRefreshAt"),
             referenceStationId = reference?.optString("stationId"),
@@ -45,6 +49,37 @@ object ResultParser {
             candidates = candidates,
             baselineGeometry = o.optJSONObject("baseline")?.optString("geometry")?.takeIf { it.isNotEmpty() },
         )
+    }
+
+    fun opening(o: JSONObject?): OpeningInfo =
+        if (o == null) OpeningInfo.UNKNOWN
+        else OpeningInfo(
+            state = o.optString("state", "unknown"),
+            is24Hours = o.optBoolean("is24Hours", false),
+            closesAt = o.nullableString("closesAt"),
+            opensAt = o.nullableString("opensAt"),
+            closesInMinutes = if (o.has("closesInMinutes")) o.getInt("closesInMinutes") else null,
+        )
+
+    fun parseNearby(json: String): NearbyResult {
+        val o = JSONObject(json)
+        val list = o.getJSONArray("stations")
+        val stations = (0 until list.length()).map { i ->
+            val s = list.getJSONObject(i)
+            val pos = s.getJSONObject("position")
+            val fill = s.optJSONObject("fill")
+            NearbyStation(
+                id = s.getString("id"),
+                name = s.getString("name"),
+                brand = s.nullableString("brand"),
+                position = LatLon(pos.getDouble("lat"), pos.getDouble("lon")),
+                distanceMetres = s.getInt("distanceMetres"),
+                temporaryClosure = s.optBoolean("temporaryClosure", false),
+                opening = opening(s.optJSONObject("opening")),
+                fill = fill?.let { NearbyFill(it.getString("pencePerLitre"), it.getString("priceLastUpdated"), it.getLong("fillCostPence")) },
+            )
+        }
+        return NearbyResult(o.getJSONObject("feed").nullableString("lastSuccessfulRefreshAt"), stations)
     }
 
     fun errorCode(json: String): String? = try {

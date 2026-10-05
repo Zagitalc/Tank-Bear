@@ -14,6 +14,7 @@ data class Saved(
     val litres: String = "30",
     val baseUrl: String = "http://10.0.2.2:8787",
     val appKey: String = "",
+    val places: List<SavedPlace> = emptyList(),
 )
 
 /** Local-only preferences. Excluded from backup and cloud transfer by the app's backup rules. */
@@ -23,6 +24,7 @@ class Prefs(private val context: Context) {
     private val litresKey = stringPreferencesKey("litres")
     private val urlKey = stringPreferencesKey("base_url")
     private val keyKey = stringPreferencesKey("app_key")
+    private val placesKey = stringPreferencesKey("places")
 
     suspend fun load(): Saved {
         val p = context.store.data.first()
@@ -33,6 +35,7 @@ class Prefs(private val context: Context) {
             litres = p[litresKey] ?: d.litres,
             baseUrl = p[urlKey] ?: d.baseUrl,
             appKey = p[keyKey] ?: d.appKey,
+            places = p[placesKey]?.let { Places.decode(it) } ?: d.places,
         )
     }
 
@@ -43,6 +46,7 @@ class Prefs(private val context: Context) {
             it[litresKey] = s.litres
             it[urlKey] = s.baseUrl
             it[keyKey] = s.appKey
+            it[placesKey] = Places.encode(s.places)
         }
     }
 }

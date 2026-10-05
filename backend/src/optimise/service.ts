@@ -4,7 +4,8 @@ import type { FuelRepository } from "../repositories/fuel.ts";
 import { decodePolyline } from "../routing/polyline.ts";
 import { MAX_CANDIDATES, routeJourney } from "../routing/journey.ts";
 import type { RoutingProvider } from "../routing/types.ts";
-import { buildLine, corridorBoxes } from "./geometry.ts";
+import { openingStatus, type OpeningStatus } from "../opening/status.ts";
+import { buildLine, corridorBoxes, locateOnLine } from "./geometry.ts";
 import type { OptimiseRequest } from "./request.ts";
 import { shortlist, type Located } from "./selection.ts";
 
@@ -39,8 +40,9 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
     return err(503, "FUEL_DATA_STALE", "Fuel price data has not refreshed recently enough to recommend a stop.");
   }
 
-  const priceById = new Map<string, { pence: string; updated: string; located: Located }>();
+  const priceById = new Map<string, { pence: string; updated: string; located: Located; opening: OpeningStatus }>();
   let inCorridor = 0;
+  let closedNow = 0;
   let routing;
   try {
     routing = await routeJourney(deps.provider, {
@@ -53,14 +55,21 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
           : buildLine([[req.origin.lat, req.origin.lon], [req.origin.lat, req.origin.lon]]);
         const corridor = baseline ? undefined : FUEL_TRIP_RADIUS_METRES;
         const boxes = corridorBoxes(line, (corridor ?? 3000) + 500);
-        const rows = await deps.repo.pricedStationsInBoxes(boxes, feedFuel(req.fuelType));
+        const all = await deps.repo.pricedStationsInBoxes(boxes, feedFuel(req.fuelType));
+        // Stations that are closed right now by their usual hours are not offered. Unknown hours stay in,
+        // flagged. Arrival may be later than now, so "open" is not a promise (see docs/routing.md).
+        const at = new Date(nowMs);
+        const statuses = new Map(all.map((r) => [r.station.nodeId, openingStatus(r.station.openingHours, at)]));
+        const rows = all.filter((r) => statuses.get(r.station.nodeId)!.state !== "closed");
+        closedNow = all.filter((r) => !rows.includes(r))
+          .filter((r) => locateOnLine(line, { lat: r.station.latitude, lon: r.station.longitude }).offsetMetres <= (corridor ?? 3000)).length;
         const list = shortlist(line, rows.map((r) => ({
           stationId: r.station.nodeId, name: r.station.tradingName,
           coordinates: { lat: r.station.latitude, lon: r.station.longitude }, pencePerLitre: r.pencePerLitre,
         })), MAX_CANDIDATES, corridor);
         inCorridor = list.inCorridor;
         const updated = new Map(rows.map((r) => [r.station.nodeId, r.priceLastUpdated]));
-        for (const c of list.chosen) priceById.set(c.stationId, { pence: c.pencePerLitre, updated: updated.get(c.stationId)!, located: c });
+        for (const c of list.chosen) priceById.set(c.stationId, { pence: c.pencePerLitre, updated: updated.get(c.stationId)!, located: c, opening: statuses.get(c.stationId)! });
         return list.chosen.map((c) => ({ stationId: c.stationId, coordinates: c.coordinates }));
       },
     });
@@ -122,6 +131,7 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
       scope: "Best among the stations checked.",
       coverage: {
         stationsInSearchArea: inCorridor,
+        closedNowExcluded: closedNow,
         stationsRouted: routing.routed.length,
         routingCalls: routing.routingCalls,
         partial: routing.status === "partial",
@@ -142,6 +152,7 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
           priceSource: { priceLastUpdated: info.updated, feedLastCheckedAt: fetchedAt },
           routeGeometry: routed.geometry,
           stationSnapMetres: Math.round(routed.snapMetres),
+          opening: info.opening,
         };
       }),
       excluded: result.excluded,

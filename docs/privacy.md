@@ -35,3 +35,10 @@ per hour service-wide (provisional values). Counters use a truncated SHA-256 of 
 IP and key, never the raw values, are kept at most two hours, and fail closed. Request bodies,
 coordinates and routes are not logged or stored; route results are cached in memory for five
 minutes and not persisted. Before release, add per-install tokens or attestation if abuse appears.
+
+## Location and saved places (Stage 7)
+
+Location is requested only when the person taps "Use my location", approximate is enough, and one position is read and
+shown as the start. It is not stored or tracked, and there is no background location. Saved places are stored only on
+the phone and are excluded from backup. A search sends the coordinates being searched to the Tank Bear server; the server
+does not store them (no request logging of coordinates, caches are in memory).
