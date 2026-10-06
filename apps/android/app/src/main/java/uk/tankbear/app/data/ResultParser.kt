@@ -59,6 +59,7 @@ object ResultParser {
             closesAt = o.nullableString("closesAt"),
             opensAt = o.nullableString("opensAt"),
             closesInMinutes = if (o.has("closesInMinutes")) o.getInt("closesInMinutes") else null,
+            bankHolidayHours = o.optString("basis") == "bank_holiday_hours",
         )
 
     fun parseNearby(json: String): NearbyResult {

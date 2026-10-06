@@ -10,7 +10,7 @@ export interface FeedClient {
 }
 
 export type RunResult =
-  | { status: "complete"; stations: number; pricedStations: number; stationWrites: number; priceWrites: number; priceChanges: number; absentStationCandidates: number }
+  | { status: "complete"; stations: number; pricedStations: number; stationWrites: number; priceWrites: number; priceChanges: number; delisted: number; absentStationCandidates: number }
   | { status: "skipped"; reason: string }
   | { status: "rejected" | "failed"; reasons: string[] };
 
@@ -44,6 +44,7 @@ export async function runRefresh(client: FeedClient, repo: FuelRepository, now: 
     return {
       status: "complete", stations: ns.valid.length, pricedStations: np.valid.length,
       stationWrites: diff.stationUpserts.length, priceWrites: diff.priceUpserts.length, priceChanges: diff.priceChanges.length,
+      delisted: diff.delist.length,
       absentStationCandidates: absent,
     };
   } catch {

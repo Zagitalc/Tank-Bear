@@ -14,4 +14,6 @@
     <string name="settings_title">You’re in control</string>
     <string name="settings_body">No account needed. Tank Bear will ask before using your location.</string>
     <string name="settings_status">This early version does not collect location or make network requests.</string>
+    <!-- Required by Fuel Finder: credit must be clearly visible wherever prices are shown. -->
+    <string name="data_attribution">Fuel price data: Fuel Finder/ICS</string>
 </resources>

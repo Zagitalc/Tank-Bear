@@ -197,4 +197,15 @@ class DataTest {
         assertEquals("132.9", n.localMedianPencePerLitre)
         assertTrue(n.stations.first { it.id == "near-open" }.fill!!.vsLocalMedianPencePerLitre != null)
     }
+
+    @Test fun bankHolidayHoursAreNamed() {
+        assertEquals("Open until 16:00 (bank holiday hours)", Formatting.opening(OpeningInfo("open", closesAt = "16:00", closesInMinutes = 200, bankHolidayHours = true)))
+        assertEquals("Opening hours unknown", Formatting.opening(OpeningInfo("unknown", bankHolidayHours = true)))
+    }
+
+    @Test fun attributionTextMatchesTheProviderRequirement() {
+        // Kept in sync with backend/src/domain/attribution.ts; Fuel Finder asked for "Fuel Finder/ICS".
+        val strings = java.io.File("src/main/res/values/strings.xml").readText()
+        assertTrue(strings.contains("Fuel Finder/ICS"))
+    }
 }

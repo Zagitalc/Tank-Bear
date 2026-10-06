@@ -45,6 +45,7 @@ class AppNavigationTest {
 
         tab("Settings").performClick()
         compose.onNodeWithText("You’re in control").assertIsDisplayed()
+        compose.onNodeWithText("Fuel price data: Fuel Finder/ICS").performScrollTo().assertIsDisplayed()
         tab("Map").performClick()
         tab("Map").assertIsSelected()
         tab("Find").performClick()

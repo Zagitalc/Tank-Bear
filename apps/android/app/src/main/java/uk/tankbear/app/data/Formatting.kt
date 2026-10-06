@@ -52,7 +52,9 @@ object Formatting {
     }
 
     /** Plain wording for usual opening hours; says so when it cannot tell. */
-    fun opening(o: OpeningInfo): String = when {
+    fun opening(o: OpeningInfo): String = openingCore(o) + if (o.bankHolidayHours && o.state != "unknown") " (bank holiday hours)" else ""
+
+    private fun openingCore(o: OpeningInfo): String = when {
         o.state == "open" && o.is24Hours -> "Open 24 hours"
         o.state == "open" && o.closesInMinutes != null && o.closesInMinutes <= 30 -> "Closes in ${o.closesInMinutes} min"
         o.state == "open" && o.closesAt != null -> "Open until ${o.closesAt}"

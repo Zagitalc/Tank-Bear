@@ -4,7 +4,15 @@ Status at 5 October 2026: Stages 0 to 8 are built and run locally. Nothing is de
 This lists what must be decided or done before anyone other than the developer uses Tank Bear. "Blocker" means do
 not release without it. Items marked "check" need a person's decision or an external answer, not code.
 
-## 1. Data rights (blocker)
+## 1. Data rights
+
+Answered by the Fuel Finder Service Team on 6 October 2026 (see `fuel-finder-contract.md`): caching, in-service trends and
+history retention are allowed; no raw redistribution or bulk export; "Fuel Finder/ICS" must be credited in the app (done).
+Remaining: confirm the exact attribution wording against the onboarding terms, keep the Nearby caps in place, and test
+production egress (WAF may restrict non-residential IPs; a static UK IP can be allowlisted on request).
+
+Earlier notes, kept for history:
+
 
 - **Check:** may Tank Bear cache Fuel Finder data server-side, keep price-change history, and show individual prices next
   to derived journey savings in clients? The guidelines recommend caching and say "don't redistribute raw API data";

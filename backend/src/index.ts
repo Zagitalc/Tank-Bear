@@ -23,8 +23,8 @@ export default {
     return withSecurityHeaders(await route(request, env));
   },
   async scheduled(_controller, env): Promise<void> {
-    // Counters older than two hours are useless; failure here must not block the refresh.
-    await createRateLimiter(env.DB).purgeBefore(Math.floor(Date.now() / 1000) - 7200).catch(() => undefined);
+    // Counters older than two days are useless (daily windows are the longest); failure must not block the refresh.
+    await createRateLimiter(env.DB).purgeBefore(Math.floor(Date.now() / 1000) - 2 * 86_400).catch(() => undefined);
     // Keep 35 days of refresh log: enough for a 30 day window plus slack.
     await createFuelRepository(env.DB).purgeRefreshLog(new Date(Date.now() - 35 * 86_400_000).toISOString()).catch(() => undefined);
     if (!env.FUEL_FINDER_CLIENT_ID || !env.FUEL_FINDER_CLIENT_SECRET) return;

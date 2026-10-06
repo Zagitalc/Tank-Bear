@@ -236,6 +236,7 @@ private fun StationPanel(c: Candidate?, total: Int) {
                 Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
                 Text("${Formatting.pricePerLitre(c.pencePerLitre)} · extra ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
                 Text("Grey: your direct route. Amber: the route through this station. Tap another station to compare.", style = MaterialTheme.typography.bodyMedium)
+                DataAttribution()
             }
         }
     }

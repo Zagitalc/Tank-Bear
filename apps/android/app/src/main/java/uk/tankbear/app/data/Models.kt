@@ -25,6 +25,8 @@ data class OpeningInfo(
     val closesAt: String? = null,
     val opensAt: String? = null,
     val closesInMinutes: Int? = null,
+    /** True when the station's bank-holiday hours were used instead of usual hours. */
+    val bankHolidayHours: Boolean = false,
 ) {
     companion object { val UNKNOWN = OpeningInfo("unknown") }
 }

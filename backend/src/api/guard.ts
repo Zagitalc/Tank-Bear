@@ -7,9 +7,15 @@ export const MIN_KEY_LENGTH = 24;
 /** Per-caller and whole-service ceilings. Provisional; tune with real traffic. */
 export const LIMITS = {
   optimisePerCallerPerMinute: 10,
-  nearbyPerCallerPerMinute: 60,
+  nearbyPerCallerPerMinute: 20,
   historyPerCallerPerMinute: 30,
+  // Daily ceilings per caller. At 20 stations a lookup, 150 lookups is at most 3,000 station rows a day for one
+  // caller, so copying the national feed (about 8,100 stations) is slow and visible rather than a 3 minute job.
+  optimisePerCallerPerDay: 100,
+  nearbyPerCallerPerDay: 150,
+  historyPerCallerPerDay: 100,
   optimiseGlobalPerHour: 1500,
+  nearbyGlobalPerHour: 3000,
 } as const;
 
 const headers = { "Cache-Control": "no-store" };
@@ -52,13 +58,20 @@ export async function guard(request: Request, env: Pick<Env, "API_KEYS">, limite
 
   const minute = Math.floor(now / 60_000) * 60;
   const hour = Math.floor(now / 3_600_000) * 3600;
+  const day = Math.floor(now / 86_400_000) * 86_400;
   try {
     const caller = await callerBucket(request, supplied);
     const perCaller = route === "optimise" ? LIMITS.optimisePerCallerPerMinute : route === "history" ? LIMITS.historyPerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
     if ((await limiter.hit(`${route}:${caller}`, minute)) > perCaller) {
       return fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.", { "Retry-After": String(60 - (Math.floor(now / 1000) - minute)) });
     }
-    if (route === "optimise" && (await limiter.hit("optimise:all", hour)) > LIMITS.optimiseGlobalPerHour) {
+    const perDay = route === "optimise" ? LIMITS.optimisePerCallerPerDay : route === "history" ? LIMITS.historyPerCallerPerDay : LIMITS.nearbyPerCallerPerDay;
+    // Daily buckets use a distinct prefix so they never collide with minute windows.
+    if ((await limiter.hit(`${route}:day:${caller}`, day)) > perDay) {
+      return fail(429, "DAILY_LIMIT", "Daily limit reached. Try again tomorrow.", { "Retry-After": String(86_400 - (Math.floor(now / 1000) - day)) });
+    }
+    const globalCap = route === "optimise" ? LIMITS.optimiseGlobalPerHour : route === "nearby" ? LIMITS.nearbyGlobalPerHour : null;
+    if (globalCap !== null && (await limiter.hit(`${route}:all`, hour)) > globalCap) {
       return fail(429, "SERVICE_BUSY", "The service is busy. Try again later.", { "Retry-After": "300" });
     }
   } catch {

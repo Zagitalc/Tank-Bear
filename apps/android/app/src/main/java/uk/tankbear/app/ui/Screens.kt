@@ -31,6 +31,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import uk.tankbear.app.R
 import androidx.core.content.ContextCompat
 import uk.tankbear.app.data.NearbyStation
 import uk.tankbear.app.data.NearbyResult
@@ -133,10 +135,17 @@ private fun CoordinateRow(lat: String, lon: String, onLat: (String) -> Unit, onL
     }
 }
 
+/** Fuel Finder requires this credit wherever prices are shown. */
+@Composable
+fun DataAttribution() {
+    Text(stringResource(R.string.data_attribution), style = MaterialTheme.typography.labelMedium)
+}
+
 @Composable
 private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewModel, onShowOnMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(result.scope, style = MaterialTheme.typography.titleMedium)
+        DataAttribution()
         Text(
             "Routed ${result.stationsRouted} of ${result.stationsInSearchArea} stations near your route" +
                 (if (result.partial) ". Some couldn't be checked, so this may miss a better stop." else "."),
@@ -231,6 +240,9 @@ fun SettingsScreen(vm: AppViewModel) {
                 "10.0.2.2 reaches a server on your computer from the Android emulator.",
             style = MaterialTheme.typography.bodyMedium,
         )
+        Text("About the data", style = MaterialTheme.typography.titleMedium)
+        DataAttribution()
+        Text("Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.", style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -329,6 +341,7 @@ private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time
     val cheapest = stations.filter { it.fill != null && !it.temporaryClosure && it.opening.state != "closed" }.minByOrNull { it.fill!!.fillCostPence }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Within 3 miles of your start, ${stations.size} found", style = MaterialTheme.typography.titleMedium)
+        DataAttribution()
         result.feedLastSuccessfulRefresh?.let {
             Text("Prices checked ${Formatting.age(it, now)}. Each price shows when it last changed.", style = MaterialTheme.typography.bodyMedium)
         }
@@ -383,6 +396,7 @@ private fun HistoryBody(h: PriceHistory, now: java.time.Instant) {
         // A trend is shown only when the whole window was watched; otherwise say exactly why not.
         h.coverage.reason?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         PriceStepChart(h)
+        DataAttribution()
         Text(
             "Prices are the provider's own change times. Tank Bear has watched since " +
                 (h.coverage.watchingSince?.let { Formatting.age(it, now) } ?: "never") + ".",

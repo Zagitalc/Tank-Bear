@@ -82,10 +82,43 @@ test("worker applies the gate to /v1 routes, leaves /health open, and adds nosni
   assert.equal(health.status, 200);
 });
 
-test("scheduled job purges old counters only", async () => {
+test("scheduled job purges counters older than two days only", async () => {
   const { db, sql } = setup();
   const now = Math.floor(Date.now() / 1000);
-  sql.prepare("INSERT INTO rate_limits VALUES ('old', ?, 1), ('new', ?, 1)").run(now - 10_000, now);
+  sql.prepare("INSERT INTO rate_limits VALUES ('old', ?, 1), ('new', ?, 1)").run(now - 3 * 86_400, now - 3_600);
   await (worker as any).scheduled({}, { DB: db });
   assert.deepEqual((sql.prepare("SELECT bucket FROM rate_limits").all() as { bucket: string }[]).map((r) => r.bucket), ["new"]);
+});
+
+
+test("a caller who keeps within the per-minute limit still hits a daily ceiling", async () => {
+  const { limiter } = setup();
+  const env = { API_KEYS: KEY };
+  const start = Date.parse("2026-10-05T00:00:30Z");
+  let blocked: Response | null = null;
+  let allowed = 0;
+  // Spread calls one minute apart so the minute limit never trips.
+  for (let i = 0; i < LIMITS.nearbyPerCallerPerDay + 5 && !blocked; i++) {
+    const r = await guard(req(KEY), env, limiter, "nearby", start + i * 60_000);
+    if (r) blocked = r; else allowed++;
+  }
+  assert.equal(allowed, LIMITS.nearbyPerCallerPerDay);
+  assert.equal(blocked?.status, 429);
+  assert.equal(((await blocked!.json()) as any).error.code, "DAILY_LIMIT");
+  // The next UTC day starts a fresh allowance.
+  assert.equal(await guard(req(KEY), env, limiter, "nearby", Date.parse("2026-10-06T00:00:30Z")), null);
+});
+
+test("nearby has its own service-wide hourly ceiling", async () => {
+  const { limiter, sql } = setup();
+  const hour = Math.floor(NOW / 3_600_000) * 3600;
+  sql.prepare("INSERT INTO rate_limits VALUES ('nearby:all', ?, ?)").run(hour, LIMITS.nearbyGlobalPerHour);
+  const r = await guard(req(KEY), { API_KEYS: KEY }, limiter, "nearby", NOW);
+  assert.equal(((await r!.json()) as any).error.code, "SERVICE_BUSY");
+});
+
+test("a whole-country scrape with one key is now a matter of days, not minutes", () => {
+  // Documented arithmetic, so a future change to the limits is a deliberate decision.
+  const stationsPerDay = LIMITS.nearbyPerCallerPerDay * 20;
+  assert.ok(8100 / stationsPerDay > 2);
 });

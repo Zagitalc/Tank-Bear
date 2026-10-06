@@ -218,3 +218,16 @@ First 2000 stations: every record had `opening_times` with `usual_days` (all sev
 `is_24_hours`). About 45% of days were flagged 24 hours. The same shape appears for missing data (open equals close with
 the flag false), so Tank Bear treats that as "unknown". Timezone is not stated; UK local time is assumed. Which bank
 holidays apply is not stated either, so bank holiday hours are neither stored nor applied.
+
+## Official answers from the Fuel Finder Service Team (email, 6 October 2026)
+
+These replace the earlier inferences where they differ. Wording is summarised, not quoted in full.
+
+| Topic | Answer | What Tank Bear does |
+|---|---|---|
+| Data use | Server-side caching for operating the app is allowed. Short-term trends such as seven-day movements are allowed within the service. No raw redistribution or bulk export. No fixed limit on retaining history for internal use. Attribution to "Fuel Finder/ICS" must be clearly displayed in the app. | Every price response carries `attribution: "Fuel Finder/ICS"`; the app shows "Fuel price data: Fuel Finder/ICS" on results, Nearby, history, the map panel and Settings. Nearby is capped (10 km, 20 stations, 20 a minute and 150 a day per caller) so the API cannot serve as a bulk copy. |
+| Pagination | 500 per batch; the final batch has fewer than 500; any non-existent batch returns 404. This is intended. Data is consistent within one pass; live updates may occur between passes. | Matches the adapter. The exact-multiple-of-500 case (404 after a full batch) remains accepted with the stricter total check. |
+| Prices | Pence per litre; typically whole pence; fractions will not exceed standard UK retail formats. | Kept as exact decimals (observed values are mostly one decimal place); never rounded on ingestion. |
+| Opening times | Local UK time. Bank holiday entries override normal hours where provided. 00:00 to 00:00 with `is_24_hours` false means closed that day. | Europe/London with daylight saving. 00:00 to 00:00 is closed. A `bank_holiday` entry of type "bank holiday" replaces usual hours on that nation's bank holidays (GOV.UK calendar in `backend/src/opening/bank-holidays.ts`, covers to the end of 2028); type "standard" is read as "usual hours apply" (our interpretation). Nation comes from the country field, else the postcode area; if unknown on a date that is a holiday somewhere in the UK, status is unknown. Any other open-equals-close stays unknown. |
+| Removals | Permanently closed forecourts are flagged before removal, then removed at the next update cycle. | `permanent_closure` stations are excluded. A station missing from a complete, validated refresh is marked `delisted_at` (migration 0005) and hidden; rows and history are kept; it clears if the station returns. Failed or rejected refreshes never delist. |
+| Requests | A valid User-Agent is required on token requests and should be on all calls. Cloud hosting networks are allowed, but VPN, proxy and non-residential IP ranges may hit WAF restrictions; static UK IPs are recommended, and the team will allowlist specific static IPs on request (organisation name, reason, server location, IP addresses). | Every request sends `TankBear/0.1 (+https://github.com/Zagitalc/Tank-Bear)`. All tests so far used a residential connection; production egress is untested. See `hosting.md`. |
