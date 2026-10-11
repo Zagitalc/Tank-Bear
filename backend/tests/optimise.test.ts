@@ -251,3 +251,31 @@ for (const fuelType of ["E5", "B7_PREMIUM"]) {
     assert.equal(body.candidates.length, 0);
   });
 }
+
+test("one-way API costs the outbound route and return API costs its asymmetric round trip", async () => {
+  const s = seed();
+  s.add("FuelStop", { lat: A.lat + 0.01, lon: A.lon }, "150.0");
+  const calls: Coordinates[][] = [];
+  const provider: RoutingProvider = { contextId: "test|v1", async route(stops) {
+    calls.push([...stops]);
+    return { kind: "ok", path: {
+      totals: { distanceMetres: stops.length === 2 ? "1609.344" : "4828.032", durationSeconds: stops.length === 2 ? "120" : "420", contextId: "test|v1", usesFerry: false, usesToll: false },
+      geometry: encodePolyline(stops.map((p) => [p.lat, p.lon])), snapMetres: stops.map(() => 1), provider: "test", graphVersion: "v1",
+    } };
+  } };
+  const e = { provider, calls };
+  const one = await run(s, e, { mode: "fuel_trip_one_way", destination: undefined, vehicle: { mpgImperial: "45" } });
+  const back = await run(s, e, { mode: "fuel_trip", destination: undefined, vehicle: { mpgImperial: "45" } });
+  assert.equal(one.res.status, 200);
+  assert.equal(back.res.status, 200);
+  assert.equal(one.body.mode, "fuel_trip_one_way");
+  assert.equal(one.body.baseline, null);
+  assert.equal(one.body.candidates[0].detourFuelCostPence, 15);
+  assert.equal(back.body.candidates[0].detourFuelCostPence, 45);
+  assert.equal(one.body.candidates[0].fillCostPence, 4500);
+  assert.equal(one.body.candidates[0].comparisonCostPence, 4515);
+  assert.equal(back.body.candidates[0].comparisonCostPence, 4545);
+  assert.deepEqual(calls.map((x) => x.length), [2, 3]);
+  const invalid = await run(s, e, { mode: "fuel_trip_one_way" }); // destination is forbidden
+  assert.equal(invalid.res.status, 400);
+});

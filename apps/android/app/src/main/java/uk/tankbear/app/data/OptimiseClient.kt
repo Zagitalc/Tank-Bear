@@ -19,7 +19,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("X-Tank-Bear-Key", appKey)
+                if (appKey.isNotBlank()) setRequestProperty("X-Tank-Bear-Key", appKey)
             }
             try {
                 connection.outputStream.use { it.write(body(request).toByteArray()) }
@@ -29,7 +29,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 if (status == 200) {
                     ApiOutcome.Ok(ResultParser.parse(text))
                 } else {
-                    responseFailure(status, text, connection.getHeaderField("Retry-After")?.toIntOrNull(), request.fuelType)
+                    responseFailure(status, text, connection.getHeaderField("Retry-After")?.toIntOrNull(), request.fuelType, request.mode)
                 }
             } finally {
                 connection.disconnect()
@@ -37,7 +37,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
+            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your internet connection and try again.")
         }
     }
 
@@ -50,7 +50,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 connectTimeout = 8_000
                 readTimeout = 20_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("X-Tank-Bear-Key", appKey)
+                if (appKey.isNotBlank()) setRequestProperty("X-Tank-Bear-Key", appKey)
             }
             try {
                 val status = connection.responseCode
@@ -64,7 +64,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
+            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your internet connection and try again.")
         }
     }
 
@@ -75,7 +75,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 connectTimeout = 8_000
                 readTimeout = 20_000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("X-Tank-Bear-Key", appKey)
+                if (appKey.isNotBlank()) setRequestProperty("X-Tank-Bear-Key", appKey)
             }
             try {
                 val status = connection.responseCode
@@ -89,7 +89,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
+            ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your internet connection and try again.")
         }
     }
 
@@ -106,8 +106,13 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
         private fun point(p: LatLon) = JSONObject().put("lat", p.lat).put("lon", p.lon)
 
         /** Recognise only known legacy validation messages, never display arbitrary server text. */
-        fun responseFailure(status: Int, text: String, retryAfter: Int?, fuel: FuelType): ApiOutcome.Failure {
+        fun responseFailure(status: Int, text: String, retryAfter: Int?, fuel: FuelType, mode: Mode? = null): ApiOutcome.Failure {
             val error = runCatching { JSONObject(text).optJSONObject("error") }.getOrNull()
+            if (status == 400 && error?.optString("code") == "INVALID_REQUEST" && mode == Mode.FuelTripOneWay &&
+                error.optString("message") == "mode must be \"along_journey\" or \"fuel_trip\".") {
+                return ApiOutcome.Failure(FailureKind.Server,
+                    "One-way fuel trips need a Tank Bear server update. A return trip will not be substituted.")
+            }
             val legacyGradeMessages = setOf(
                 "fuelType must be \"E10\" or \"B7\" (standard diesel).",
                 "fuelType must be E10 or B7.",
@@ -123,7 +128,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
 
         fun failure(status: Int, code: String?, retryAfter: Int?): ApiOutcome.Failure = when {
             status == 401 || code == "UNAUTHORISED" ->
-                ApiOutcome.Failure(FailureKind.Unauthorised, "The app key was not accepted. Check it in Settings.")
+                ApiOutcome.Failure(FailureKind.Unauthorised, "Tank Bear access is not enabled for this installation yet. Please contact the person who shared the app.")
             status == 429 ->
                 ApiOutcome.Failure(FailureKind.RateLimited, "Too many requests. Try again shortly.", retryAfter)
             code == "NO_ROUTE" ->

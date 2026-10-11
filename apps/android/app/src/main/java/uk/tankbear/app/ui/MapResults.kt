@@ -66,6 +66,7 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
                         if (it.partial) " Some could not be checked." else "")
                     if (it.closedNowExcluded > 0) Text("${it.closedNowExcluded} closed stations excluded.")
                     Text(if (it.baselineGeometry != null) "Grey: direct route. Amber: selected stop. Costs show the extra detour."
+                        else if (it.oneWay) "Amber: one-way route to the station. Driving cost excludes a return journey."
                         else "Amber: there-and-back route. Driving cost covers the whole return trip.")
                 }
                 if (nearby != null) Text("Nearby distances are straight-line distances. Fill prices exclude driving costs.")
@@ -85,7 +86,7 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
                 Text(Formatting.opening(c.opening))
                 Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
                 Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)", style = MaterialTheme.typography.titleSmall)
-                Text("${if (result.baselineGeometry != null) "Extra detour" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
+                Text("${if (result.baselineGeometry != null) "Extra detour" else if (result.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
                 Text("Using the MPG and fuel price from this search.", style = MaterialTheme.typography.bodySmall)
                 val reference = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
                 Text(if (c.stationId == result.referenceStationId) "Comparison station" else Formatting.savingHeadline(c.trueSavingPence, reference))

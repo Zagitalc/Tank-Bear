@@ -138,8 +138,8 @@ function display(candidate: Scored, reference: Scored, best: Scored, rank: numbe
 
 /** Pure engine: supplied routes/prices only; no I/O, clock reads or mutation. */
 export function rankFuelStops(input: EconomicsInput): EconomicsResult {
-  if (input.mode !== "along_journey" && input.mode !== "fuel_trip") {
-    throw new CalculationInputError("mode", "only along_journey and fuel_trip have routed economics");
+  if (input.mode !== "along_journey" && input.mode !== "fuel_trip" && input.mode !== "fuel_trip_one_way") {
+    throw new CalculationInputError("mode", "only along_journey, fuel_trip and fuel_trip_one_way have routed economics");
   }
   validateCoordinates(input.origin, "origin");
   if (!isFuelType(input.fuelType)) {
@@ -167,7 +167,7 @@ export function rankFuelStops(input: EconomicsInput): EconomicsResult {
       throw new CalculationInputError("baselineRoute", "unpriced ferry/toll routes require review");
     }
   } else if (input.baselineRoute !== undefined || input.destination !== undefined) {
-    throw new CalculationInputError("fuel_trip", "uses a zero baseline and an entire return route");
+    throw new CalculationInputError("fuel_trip", "uses a zero baseline and the entire requested fuel trip");
   }
 
   const excluded: ExcludedCandidate[] = [];

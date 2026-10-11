@@ -22,3 +22,6 @@ local.properties
 
 # Local Valhalla graph and OSM extract
 tools/valhalla/data/
+
+# Local beta signing material
+.local/

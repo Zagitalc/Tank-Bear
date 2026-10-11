@@ -47,7 +47,7 @@ interface CommonInput {
 
 export type EconomicsInput = CommonInput & (
   | { mode: "along_journey"; destination: Coordinates; baselineRoute: RouteTotals }
-  | { mode: "fuel_trip"; destination?: never; baselineRoute?: never }
+  | { mode: "fuel_trip" | "fuel_trip_one_way"; destination?: never; baselineRoute?: never }
 );
 
 export type ExclusionReason =

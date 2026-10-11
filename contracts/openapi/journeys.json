@@ -81,9 +81,9 @@
         "type": "object",
         "required": ["mode", "origin", "fuelType", "vehicle", "litresToBuy"],
         "properties": {
-          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "mode": { "enum": ["along_journey", "fuel_trip", "fuel_trip_one_way"] },
           "origin": { "$ref": "#/components/schemas/Point" },
-          "destination": { "$ref": "#/components/schemas/Point", "description": "Required for along_journey; not allowed for fuel_trip." },
+          "destination": { "$ref": "#/components/schemas/Point", "description": "Required for along_journey; not allowed for fuel_trip or fuel_trip_one_way." },
           "fuelType": { "enum": ["E10", "E5", "B7", "B7_PREMIUM"], "description": "B7 is standard diesel; B7_PREMIUM is premium diesel. Grades are never substituted." },
           "vehicle": { "type": "object", "required": ["mpgImperial"], "properties": { "mpgImperial": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "5 to 200." } } },
           "litresToBuy": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "1 to 500." },
@@ -95,7 +95,7 @@
         "required": ["calculationVersion", "mode", "status", "scope", "coverage", "routing", "feed", "baseline", "reference", "labels", "candidates", "excluded"],
         "properties": {
           "calculationVersion": { "type": "string" },
-          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "mode": { "enum": ["along_journey", "fuel_trip", "fuel_trip_one_way"] },
           "status": { "enum": ["ranked", "no_candidates"] },
           "scope": { "type": "string" },
           "coverage": { "type": "object", "required": ["stationsInSearchArea", "closedNowExcluded", "stationsRouted", "routingCalls", "partial", "notRouted", "excludedByLimits"] },

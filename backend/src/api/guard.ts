@@ -16,6 +16,7 @@ export const LIMITS = {
   historyPerCallerPerDay: 100,
   optimiseGlobalPerHour: 1500,
   nearbyGlobalPerHour: 3000,
+  historyGlobalPerHour: 3000,
 } as const;
 
 const headers = { "Cache-Control": "no-store" };
@@ -44,23 +45,25 @@ async function callerBucket(request: Request, key: string): Promise<string> {
 export type Route = "optimise" | "nearby" | "history";
 
 /**
- * Gate for every /v1 route. Fails closed: with no configured keys, or a limiter fault, nothing is served.
+ * Gate for every /v1 route. Keyed by default; PUBLIC_APP_ACCESS=1 explicitly opts into keyless access.
+ * A limiter fault always fails closed. Public callers share an IP bucket regardless of supplied headers.
  * The key identifies the app build, not a person (Tank Bear has no accounts). A key shipped inside an
  * Android app can be extracted, so this deters casual abuse and enables rotation; it is not user auth.
  */
-export async function guard(request: Request, env: Pick<Env, "API_KEYS">, limiter: RateLimiter, route: Route, now = Date.now()): Promise<Response | null> {
+export async function guard(request: Request, env: Pick<Env, "API_KEYS" | "PUBLIC_APP_ACCESS">, limiter: RateLimiter, route: Route, now = Date.now()): Promise<Response | null> {
   const configured = (env.API_KEYS ?? "").split(",").map((k) => k.trim()).filter((k) => k.length >= MIN_KEY_LENGTH);
-  if (configured.length === 0) return fail(503, "AUTH_NOT_CONFIGURED", "The service is not configured to accept requests.");
+  const publicAccess = env.PUBLIC_APP_ACCESS === "1";
+  if (!publicAccess && configured.length === 0) return fail(503, "AUTH_NOT_CONFIGURED", "The service is not configured to accept requests.");
   const supplied = request.headers.get(API_KEY_HEADER) ?? "";
   let matched = false;
   for (const k of configured) if (await sameSecret(supplied, k)) matched = true; // No early exit.
-  if (!matched) return fail(401, "UNAUTHORISED", "A valid API key is required.");
+  if (!publicAccess && !matched) return fail(401, "UNAUTHORISED", "A valid API key is required.");
 
   const minute = Math.floor(now / 60_000) * 60;
   const hour = Math.floor(now / 3_600_000) * 3600;
   const day = Math.floor(now / 86_400_000) * 86_400;
   try {
-    const caller = await callerBucket(request, supplied);
+    const caller = await callerBucket(request, publicAccess ? "public-beta" : supplied);
     const perCaller = route === "optimise" ? LIMITS.optimisePerCallerPerMinute : route === "history" ? LIMITS.historyPerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
     if ((await limiter.hit(`${route}:${caller}`, minute)) > perCaller) {
       return fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.", { "Retry-After": String(60 - (Math.floor(now / 1000) - minute)) });
@@ -70,7 +73,7 @@ export async function guard(request: Request, env: Pick<Env, "API_KEYS">, limite
     if ((await limiter.hit(`${route}:day:${caller}`, day)) > perDay) {
       return fail(429, "DAILY_LIMIT", "Daily limit reached. Try again tomorrow.", { "Retry-After": String(86_400 - (Math.floor(now / 1000) - day)) });
     }
-    const globalCap = route === "optimise" ? LIMITS.optimiseGlobalPerHour : route === "nearby" ? LIMITS.nearbyGlobalPerHour : null;
+    const globalCap = route === "optimise" ? LIMITS.optimiseGlobalPerHour : route === "nearby" ? LIMITS.nearbyGlobalPerHour : LIMITS.historyGlobalPerHour;
     if (globalCap !== null && (await limiter.hit(`${route}:all`, hour)) > globalCap) {
       return fail(429, "SERVICE_BUSY", "The service is busy. Try again later.", { "Retry-After": "300" });
     }

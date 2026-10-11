@@ -23,6 +23,7 @@ class AppNavigationTest {
     /** Saved places persist on the device between runs; start every test with none so labels are unambiguous. */
     @Before
     fun removeAnySavedPlaces() {
+        compose.onNodeWithText("Find").performClick()
         while (compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isNotEmpty()) {
             compose.onAllNodesWithText("Remove")[0].performScrollTo().performClick()
             compose.waitForIdle()

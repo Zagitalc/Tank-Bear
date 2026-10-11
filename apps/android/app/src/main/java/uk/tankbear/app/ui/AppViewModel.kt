@@ -91,7 +91,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleHistory(stationId: String) {
         if (histories.containsKey(stationId)) { histories.remove(stationId); return }
-        if (saved.appKey.isBlank()) { histories[stationId] = HistoryState.Failed("Add the app key in Settings."); return }
         histories[stationId] = HistoryState.Loading
         viewModelScope.launch {
             histories[stationId] = when (val o = OptimiseClient(saved.baseUrl, saved.appKey).history(stationId, saved.fuel)) {
@@ -198,7 +197,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun searchNearby() {
         val origin = Validation.point(originLat, originLon) ?: return fail("Choose your start on the map or use your location.")
         val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
-        if (saved.appKey.isBlank()) return fail("Add the app key in Settings.")
         job?.cancel()
         val submittedInputs = inputs
         val connection = saved
@@ -227,7 +225,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else null
         val mpg = Validation.mpg(saved.mpg) ?: return fail("Set your car's Imperial MPG (5 to 200) on the Car tab.")
         val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
-        if (saved.appKey.isBlank()) return fail("Add the app key in Settings.")
         val request = JourneyRequest(mode, origin, destination, saved.fuel, mpg, litres)
         job?.cancel()
         val submittedInputs = inputs

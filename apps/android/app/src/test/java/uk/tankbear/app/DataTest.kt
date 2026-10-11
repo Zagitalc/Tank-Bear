@@ -75,6 +75,20 @@ class DataTest {
         }
     }
 
+    @Test fun oneWayAndReturnAreDistinctRequestsAndResults() {
+        val point = LatLon(51.45, -0.97)
+        val one = JSONObject(OptimiseClient.body(JourneyRequest(Mode.FuelTripOneWay, point, null, FuelType.E5, "40", "30")))
+        assertEquals("fuel_trip_one_way", one.getString("mode"))
+        assertFalse(one.has("destination"))
+        val response = JSONObject(sample).put("mode", "fuel_trip_one_way").put("baseline", JSONObject.NULL)
+        assertTrue(ResultParser.parse(response.toString()).oneWay)
+        assertNull(ResultParser.parse(response.toString()).baselineGeometry)
+        assertFalse(ResultParser.parse(sample).oneWay)
+        val legacy = JSONObject().put("error", JSONObject().put("code", "INVALID_REQUEST")
+            .put("message", "mode must be \"along_journey\" or \"fuel_trip\".")).toString()
+        assertTrue(OptimiseClient.responseFailure(400, legacy, null, FuelType.E5, Mode.FuelTripOneWay).message.contains("server update"))
+    }
+
     @Test fun requestBodyMatchesTheContract() {
         val body = JSONObject(OptimiseClient.body(JourneyRequest(Mode.AlongJourney, LatLon(51.45, -0.97), LatLon(51.75, -1.25), FuelType.B7, "45", "30")))
         assertEquals("along_journey", body.getString("mode"))

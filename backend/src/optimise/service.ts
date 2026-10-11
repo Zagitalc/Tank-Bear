@@ -115,7 +115,7 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
     };
     result = req.mode === "along_journey" && baseline && req.destination
       ? rankFuelStops({ ...common, mode: "along_journey", destination: req.destination, baselineRoute: baseline.route })
-      : rankFuelStops({ ...common, mode: "fuel_trip" });
+      : rankFuelStops({ ...common, mode: req.mode === "fuel_trip_one_way" ? "fuel_trip_one_way" : "fuel_trip" });
   } catch (e) {
     if (e instanceof CalculationInputError) return err(422, "ROUTE_NEEDS_REVIEW", "The base route uses a ferry or toll, so costs cannot be compared reliably.");
     throw e;

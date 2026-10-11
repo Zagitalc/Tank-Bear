@@ -29,7 +29,7 @@ export type JourneyRouting =
   | { status: "baseline_failed"; reason: "no_route" | "routing_error"; routingCalls: number }
   | {
       status: "ok" | "partial";
-      mode: "along_journey" | "fuel_trip";
+      mode: "along_journey" | "fuel_trip" | "fuel_trip_one_way";
       /** Null in fuel_trip mode, where the baseline is zero travel. */
       baseline: { route: RouteTotals; geometry: string } | null;
       routed: RoutedStation[];
@@ -40,7 +40,7 @@ export type JourneyRouting =
     };
 
 export interface JourneyOptions {
-  mode: "along_journey" | "fuel_trip";
+  mode: "along_journey" | "fuel_trip" | "fuel_trip_one_way";
   origin: Coordinates;
   destination?: Coordinates;
   /**
@@ -56,7 +56,7 @@ export interface JourneyOptions {
 
 /**
  * Routes the baseline and each shortlisted station with the same provider and context.
- * Along journey: A->B baseline, A->station->B candidates. Fuel trip: A->station->A, no baseline.
+ * Along journey: A->B baseline, A->station->B candidates. Return fuel trip: A->station->A; one-way: A->station. Both use zero baseline.
  * Failed stations are reported, never costed as zero detours, and no straight-line estimate is used.
  */
 export async function routeJourney(provider: RoutingProvider, options: JourneyOptions): Promise<JourneyRouting> {
@@ -96,7 +96,8 @@ export async function routeJourney(provider: RoutingProvider, options: JourneyOp
         continue;
       }
       calls++;
-      const outcome = await provider.route([origin, s.coordinates, destination]);
+      const stops = mode === "fuel_trip_one_way" ? [origin, s.coordinates] : [origin, s.coordinates, destination];
+      const outcome = await provider.route(stops);
       if (outcome.kind === "no_route") results[i] = { stationId: s.stationId, reason: "no_route" };
       else if (outcome.kind === "error") results[i] = { stationId: s.stationId, reason: "routing_error" };
       else {

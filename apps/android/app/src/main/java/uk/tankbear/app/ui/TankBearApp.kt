@@ -15,6 +15,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import uk.tankbear.app.data.Validation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,10 @@ private enum class Destination(@StringRes val label: Int, @DrawableRes val icon:
 @Composable
 fun TankBearApp(vm: AppViewModel = viewModel()) {
     var selected by rememberSaveable { mutableStateOf(Destination.Find) }
+
+    LaunchedEffect(vm.loaded) {
+        if (vm.loaded && Validation.mpg(vm.saved.mpg) == null) selected = Destination.Car
+    }
 
     TankBearTheme {
         Scaffold(
@@ -72,7 +78,13 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                     Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyLarge)
                     when (selected) {
                         Destination.Find -> FindScreen(vm, onShowOnMap = { selected = Destination.Map })
-                        Destination.Car -> CarScreen(vm)
+                        Destination.Car -> {
+                            CarScreen(vm)
+                            androidx.compose.material3.Button(
+                                enabled = Validation.mpg(vm.saved.mpg) != null && Validation.litres(vm.saved.litres) != null,
+                                onClick = { selected = Destination.Find },
+                            ) { Text("Find fuel") }
+                        }
                         else -> SettingsScreen(vm)
                     }
                 }

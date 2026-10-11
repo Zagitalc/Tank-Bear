@@ -204,3 +204,58 @@ grade. An unauthenticated request returned 401. These are single warm-service
 checks, not concurrency or cold-start benchmarks. The database, graph, secrets
 and timer configuration were not replaced. Earlier notes that deployment was
 pending are historical and superseded by this record. Code remains uncommitted.
+
+## One-way / return fuel-trip stage — prepared locally
+
+- Find now offers One way to the station and There and back from here as distinct
+  fuel-trip choices. Along Journey and Nearby retain their existing meanings.
+- The backward-compatible `fuel_trip` mode remains a return trip. New
+  `fuel_trip_one_way` sends exactly origin → station to the routing provider.
+  Both cost the full routed journey against zero travel; no route multiplier,
+  halving or doubling is used. Separate outbound/return-leg breakdowns within a
+  return result are not included in this stage.
+- The response mode controls the list/map cost labels. Mode switches invalidate
+  previous searches through the existing recovery logic. Old-server rejection
+  explains that one-way support needs a server update.
+- Backend typecheck, 187 tests and build passed. Android build, lint and 24 unit
+  tests passed. Asymmetric-route tests verify different waypoint lists and costs,
+  and Android tests verify mode serialization and result interpretation.
+- This stage is not deployed, installed, committed or pushed. Deploy the backend
+  before using the new APK; live route checks and phone interaction checks remain.
+
+## One-way deployment — 11 October 2026
+
+Deployed with explicit user approval. Saved rollback code at
+`/var/tmp/tankbear-before-one-way.tgz`, copied the backend and restarted the API.
+API and refresh timer are active; HTTPS status returned 200/ok.
+
+Public Reading sample, authenticated HTTPS: one-way and return both returned
+12 candidates for every grade. One-way/return elapsed milliseconds were E10
+277/246, E5 101/131, standard diesel 63/72 and premium diesel 88/103. Response
+modes and null fuel-trip baselines were checked. Reading → Oxford Along Journey
+also passed with a baseline; an unauthenticated request returned 401. These are
+single smoke checks with potentially warm route caches, not load benchmarks.
+No user journey was used. No graph rebuild or database migration was needed.
+The user's installed APK already exposes the new option. Earlier notes about
+pending deployment are superseded; changes remain uncommitted and unpushed.
+
+## Friend-beta stage and one-way withdrawal
+
+User review withdrew the one-way UI option: return fuel trips and Along Journey
+are the supported choices, with Nearby for un-routed prices. The backend keeps
+one-way compatibility for installed clients. A separately signed, non-debuggable
+friend APK now opens on car setup, uses the fixed live hostname, and omits developer
+connection fields. No secret is bundled. See [friend-beta.md](friend-beta.md).
+The opt-in keyless server mode is prepared and tested but not enabled or deployed;
+explicit approval and a fresh-install/live test remain. No commit or push made.
+
+## Friend-beta activation — 11 October 2026
+
+User explicitly approved keyless beta access. Saved rollback code in
+`/var/tmp/tankbear-before-public-beta.tgz`, deployed, set PUBLIC_APP_ACCESS=1,
+and restarted the API. API and refresh timer active. Live keyless HTTPS checks
+from the Mac passed status, Nearby, history and return routes for all four grades,
+plus Along Journey, using public Reading/Oxford samples. System curl verified TLS;
+the local Python installation lacked a working CA trust store. No phone connected,
+so a fresh-install device check remains outstanding. Signed beta APK is ready
+at `apps/android/app/build/outputs/apk/beta/app-beta.apk`. No commit/push performed.

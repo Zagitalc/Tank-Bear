@@ -7,7 +7,7 @@ enum class FuelType(val api: String, val label: String) {
     B7_PREMIUM("B7_PREMIUM", "Diesel (premium)"),
 }
 
-enum class Mode(val api: String) { AlongJourney("along_journey"), FuelTrip("fuel_trip"), Nearby("nearby") }
+enum class Mode(val api: String) { AlongJourney("along_journey"), FuelTrip("fuel_trip"), FuelTripOneWay("fuel_trip_one_way"), Nearby("nearby") }
 
 data class LatLon(val lat: Double, val lon: Double)
 
@@ -88,6 +88,7 @@ data class JourneyResult(
     val candidates: List<Candidate>,
     /** Encoded polyline (6 digits) of the baseline route; null in fuel-trip mode. */
     val baselineGeometry: String?,
+    val oneWay: Boolean = false,
 )
 
 enum class FailureKind { Network, Unauthorised, RateLimited, NoRoute, NoData, Invalid, Server }
