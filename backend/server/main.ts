@@ -14,11 +14,12 @@ const port = Number(e.PORT ?? 8787);
 const { db, close } = openSqliteD1(databasePath);
 const env: Env = {
   DB: db,
+  ...(e.PUBLIC_APP_ACCESS ? { PUBLIC_APP_ACCESS: e.PUBLIC_APP_ACCESS } : {}),
   ...(e.API_KEYS ? { API_KEYS: e.API_KEYS } : {}),
   ...(e.ROUTING_BASE_URL ? { ROUTING_BASE_URL: e.ROUTING_BASE_URL } : {}),
   ...(e.ROUTING_GRAPH_VERSION ? { ROUTING_GRAPH_VERSION: e.ROUTING_GRAPH_VERSION } : {}),
 };
-if (!e.API_KEYS) console.warn("API_KEYS is not set: /v1 routes will answer 503 until it is.");
+if (!e.API_KEYS && e.PUBLIC_APP_ACCESS !== "1") console.warn("API_KEYS is not set: /v1 routes will answer 503 until it is.");
 
 const server = createServer(createNodeHandler(worker, env, {
   trustProxy: e.TRUST_PROXY === "1",

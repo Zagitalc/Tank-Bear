@@ -242,3 +242,15 @@ test("routed totals feed the economics engine; ferry routes are excluded, never 
   assert.deepEqual(result.excluded.map((e) => [e.stationId, e.reason]), [["s2", "unpriced_ferry_or_toll"]]);
   assert.equal(result.labels?.cheapestPumpStationId, "s1");
 });
+
+test("one-way and return use different routed paths, never half or double", async () => {
+  const f = fake((stops) => okPath(stops.length === 2 ? 1000 : 3700, { snap: stops.map(() => 5) }));
+  const stop = stations(1);
+  const outward = await routeJourney(f.provider, { mode: "fuel_trip_one_way", origin: A, stations: stop });
+  const back = await routeJourney(f.provider, { mode: "fuel_trip", origin: A, stations: stop });
+  assert.deepEqual(f.calls, [[A, stop[0]!.coordinates], [A, stop[0]!.coordinates, A]]);
+  assert.ok(outward.status === "ok" && back.status === "ok");
+  assert.equal(outward.baseline, null);
+  assert.equal(outward.routed[0]!.route.distanceMetres, "1000");
+  assert.equal(back.routed[0]!.route.distanceMetres, "3700");
+});

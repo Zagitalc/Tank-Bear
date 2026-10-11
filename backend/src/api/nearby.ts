@@ -1,3 +1,4 @@
+import { FEED_FUEL, isFuelType } from "../domain/fuels.ts";
 import { decimal, multiply, pence } from "../domain/numbers.ts";
 import { fromThousandths, medianThousandths, toThousandths } from "../history/series.ts";
 import { openingStatus } from "../opening/status.ts";
@@ -23,7 +24,6 @@ function int(params: URLSearchParams, name: string, fallback: number): number | 
   return v === null ? fallback : /^\d{1,6}$/.test(v) ? Number(v) : null;
 }
 
-const FEED_FUEL = { E10: "E10", B7: "B7_STANDARD" } as const;
 type Fuel = keyof typeof FEED_FUEL;
 
 /** Median and range of the prices shown, among stations that look available. Used for "vs local median". */
@@ -94,8 +94,8 @@ export async function nearbyResponse(url: URL, repo: FuelRepository, now: () => 
   const litresParam = url.searchParams.get("litres");
   let fuel: { type: Fuel; litres: string } | undefined;
   if (fuelParam !== null || litresParam !== null) {
-    if ((fuelParam !== "E10" && fuelParam !== "B7") || litresParam === null || !/^\d{1,4}(?:\.\d{1,3})?$/.test(litresParam)
-      || Number(litresParam) < 1 || Number(litresParam) > 500) return bad("fuelType (E10 or B7) and litres (1 to 500) go together.");
+    if (!isFuelType(fuelParam) || litresParam === null || !/^\d{1,4}(?:\.\d{1,3})?$/.test(litresParam)
+      || Number(litresParam) < 1 || Number(litresParam) > 500) return bad("fuelType (E10, E5, B7 or B7_PREMIUM) and litres (1 to 500) go together.");
     fuel = { type: fuelParam, litres: litresParam };
   }
   try {

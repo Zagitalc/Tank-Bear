@@ -8,4 +8,6 @@ export interface Env {
   ROUTING_GRAPH_VERSION?: string;
   // Comma-separated app keys (each at least 24 characters) accepted on /v1 routes.
   API_KEYS?: string;
+  /** Explicit opt-in to a keyless, rate-limited public beta. */
+  PUBLIC_APP_ACCESS?: string;
 }

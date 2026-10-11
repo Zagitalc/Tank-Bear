@@ -1,7 +1,8 @@
+import { isFuelType } from "../domain/fuels.ts";
 import type { Coordinates, FuelType } from "../domain/types.ts";
 
 export interface OptimiseRequest {
-  mode: "along_journey" | "fuel_trip";
+  mode: "along_journey" | "fuel_trip" | "fuel_trip_one_way";
   origin: Coordinates;
   destination?: Coordinates;
   fuelType: FuelType;
@@ -34,7 +35,7 @@ function limit(v: unknown, name: string, max: number): number | undefined | stri
 export function parseOptimiseRequest(body: unknown): { ok: true; value: OptimiseRequest } | { ok: false; message: string } {
   const fail = (message: string) => ({ ok: false as const, message });
   if (!obj(body)) return fail("Body must be a JSON object.");
-  if (body.mode !== "along_journey" && body.mode !== "fuel_trip") return fail('mode must be "along_journey" or "fuel_trip".');
+  if (body.mode !== "along_journey" && body.mode !== "fuel_trip" && body.mode !== "fuel_trip_one_way") return fail('mode must be along_journey, fuel_trip or fuel_trip_one_way.');
   const origin = point(body.origin, "origin");
   if (typeof origin === "string") return fail(origin);
   let destination: Coordinates | undefined;
@@ -43,9 +44,9 @@ export function parseOptimiseRequest(body: unknown): { ok: true; value: Optimise
     if (typeof d === "string") return fail(d);
     destination = d;
   } else if (body.destination !== undefined) {
-    return fail("fuel_trip returns to the origin and takes no destination.");
+    return fail("Fuel trips take no destination; choose along_journey for a separate destination.");
   }
-  if (body.fuelType !== "E10" && body.fuelType !== "B7") return fail('fuelType must be "E10" or "B7" (standard diesel).');
+  if (!isFuelType(body.fuelType)) return fail('fuelType must be E10, E5, B7 (standard diesel) or B7_PREMIUM.');
   if (!obj(body.vehicle)) return fail("vehicle.mpgImperial is required.");
   const mpg = decimalIn(body.vehicle.mpgImperial, "vehicle.mpgImperial", 5, 200);
   if (Array.isArray(mpg)) return fail(mpg[0]!);

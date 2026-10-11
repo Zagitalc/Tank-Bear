@@ -83,7 +83,7 @@ test("prices: units, grades and timestamps are validated; bad entries do not dro
   ], NOW);
   const first = out.valid[0]!;
   assert.deepEqual(first.prices.map((p) => [p.feedFuelType, p.fuel, p.pencePerLitre]),
-    [["E10", "E10", "132.9"], ["B7_STANDARD", "B7", "141"], ["B7_PREMIUM", null, "150.5"]]);
+    [["E10", "E10", "132.9"], ["B7_STANDARD", "B7", "141"], ["B7_PREMIUM", "B7_PREMIUM", "150.5"]]);
   assert.equal(out.quarantined.length, 7);
   assert.equal(out.valid[1]?.prices.length, 0); // Station with no prices is valid, not an error.
 });

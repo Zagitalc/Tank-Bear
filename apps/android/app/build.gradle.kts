@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -22,7 +24,27 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
+    val betaSigningFile = rootProject.file("../../.local/beta-signing.properties")
+    if (betaSigningFile.exists()) {
+        val betaSecrets = Properties().apply { betaSigningFile.inputStream().use { load(it) } }
+        signingConfigs.create("friendBeta") {
+            storeFile = rootProject.file("../../.local/tankbear-beta.jks")
+            storePassword = betaSecrets.getProperty("password")
+            keyAlias = "tankbear-beta"
+            keyPassword = betaSecrets.getProperty("password")
+        }
+    }
+    buildTypes {
+        create("beta") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            matchingFallbacks += listOf("release")
+            signingConfig = signingConfigs.findByName("friendBeta")
+            resValue("string", "app_name", "Tank Bear Beta")
+        }
+    }
     testOptions { unitTests.isReturnDefaultValues = true }
     sourceSets { getByName("test").resources.srcDir("../../../contracts/fixtures") }
 }

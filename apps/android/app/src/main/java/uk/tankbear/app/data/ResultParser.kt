@@ -35,6 +35,7 @@ object ResultParser {
             )
         }
         return JourneyResult(
+            oneWay = o.optString("mode") == "fuel_trip_one_way",
             ranked = o.getString("status") == "ranked",
             scope = o.getString("scope"),
             stationsInSearchArea = coverage.getInt("stationsInSearchArea"),

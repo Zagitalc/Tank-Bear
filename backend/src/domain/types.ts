@@ -1,5 +1,5 @@
-/** These are normalized domain values, not the unverified Fuel Finder schema. */
-export type FuelType = "E10" | "B7";
+/** Normalized API values; domain/fuels.ts maps them to verified feed codes. */
+export type FuelType = "E10" | "E5" | "B7" | "B7_PREMIUM";
 
 export interface Coordinates {
   lat: number;
@@ -47,7 +47,7 @@ interface CommonInput {
 
 export type EconomicsInput = CommonInput & (
   | { mode: "along_journey"; destination: Coordinates; baselineRoute: RouteTotals }
-  | { mode: "fuel_trip"; destination?: never; baselineRoute?: never }
+  | { mode: "fuel_trip" | "fuel_trip_one_way"; destination?: never; baselineRoute?: never }
 );
 
 export type ExclusionReason =

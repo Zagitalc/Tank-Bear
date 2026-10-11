@@ -122,3 +122,26 @@ test("a whole-country scrape with one key is now a matter of days, not minutes",
   const stationsPerDay = LIMITS.nearbyPerCallerPerDay * 20;
   assert.ok(8100 / stationsPerDay > 2);
 });
+
+test("public beta must be explicitly enabled and still enforces caller limits", async () => {
+  const { limiter } = setup();
+  assert.equal((await guard(req(), { PUBLIC_APP_ACCESS: "true" }, limiter, "optimise", NOW))?.status, 503);
+  for (let i = 0; i < LIMITS.optimisePerCallerPerMinute; i++) {
+    assert.equal(await guard(req(`arbitrary-${i}`), { PUBLIC_APP_ACCESS: "1" }, limiter, "optimise", NOW), null);
+  }
+  // Rotating a supplied key must not bypass the public IP bucket.
+  assert.equal((await guard(req(), { PUBLIC_APP_ACCESS: "1" }, limiter, "optimise", NOW))?.status, 429);
+  assert.equal(await guard(req(undefined, "198.51.100.4"), { PUBLIC_APP_ACCESS: "1" }, limiter, "optimise", NOW), null);
+});
+
+test("public beta limiter failures fail closed", async () => {
+  const limiter = { async hit() { throw new Error("unavailable"); }, async purgeBefore() {} };
+  assert.equal((await guard(req(), { PUBLIC_APP_ACCESS: "1" }, limiter, "nearby", NOW))?.status, 503);
+});
+
+test("public beta nearby endpoint serves a fresh installation without a key", async () => {
+  const { db } = setup();
+  const response = await worker.fetch(new Request("https://t.test/v1/stations/nearby?lat=51.45&lon=-0.97&fuelType=E5&litres=30"),
+    { DB: db, PUBLIC_APP_ACCESS: "1" });
+  assert.equal(response.status, 200);
+});

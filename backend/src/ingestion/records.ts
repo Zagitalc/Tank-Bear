@@ -7,7 +7,7 @@ export type FeedFuelType = (typeof FEED_FUEL_TYPES)[number];
 
 /** Only grades Tank Bear's economics supports are mapped; others are kept, not guessed. */
 export function toDomainFuel(feed: FeedFuelType): FuelType | null {
-  if (feed === "E10") return "E10";
+  if (feed === "E10" || feed === "E5" || feed === "B7_PREMIUM") return feed;
   if (feed === "B7_STANDARD") return "B7";
   return null;
 }

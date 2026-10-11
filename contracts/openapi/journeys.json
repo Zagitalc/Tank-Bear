@@ -34,7 +34,7 @@
         "description": "Returns what Tank Bear has recorded. A trend is present only if the whole window was watched with few missed refreshes; otherwise trend is null and coverage.reason says why.",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" } },
-          { "name": "fuelType", "in": "query", "required": true, "schema": { "enum": ["E10", "B7"] } },
+          { "name": "fuelType", "in": "query", "required": true, "schema": { "enum": ["E10", "E5", "B7", "B7_PREMIUM"] } },
           { "name": "days", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 30, "default": 7 } }
         ],
         "responses": {
@@ -56,7 +56,7 @@
           { "name": "lon", "in": "query", "required": true, "schema": { "type": "number", "minimum": -9, "maximum": 2.5 } },
           { "name": "radiusMetres", "in": "query", "schema": { "type": "integer", "minimum": 100, "maximum": 10000, "default": 5000 } },
           { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 20, "default": 20 } },
-          { "name": "fuelType", "in": "query", "schema": { "enum": ["E10", "B7"] }, "description": "With litres, adds a per-station fill object (null when that grade has no price)." },
+          { "name": "fuelType", "in": "query", "schema": { "enum": ["E10", "E5", "B7", "B7_PREMIUM"] }, "description": "With litres, adds a per-station fill object (null when that grade has no price)." },
           { "name": "litres", "in": "query", "schema": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$" }, "description": "1 to 500. Required with fuelType." }
         ],
         "responses": {
@@ -81,10 +81,10 @@
         "type": "object",
         "required": ["mode", "origin", "fuelType", "vehicle", "litresToBuy"],
         "properties": {
-          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "mode": { "enum": ["along_journey", "fuel_trip", "fuel_trip_one_way"] },
           "origin": { "$ref": "#/components/schemas/Point" },
-          "destination": { "$ref": "#/components/schemas/Point", "description": "Required for along_journey; not allowed for fuel_trip." },
-          "fuelType": { "enum": ["E10", "B7"], "description": "B7 is standard diesel." },
+          "destination": { "$ref": "#/components/schemas/Point", "description": "Required for along_journey; not allowed for fuel_trip or fuel_trip_one_way." },
+          "fuelType": { "enum": ["E10", "E5", "B7", "B7_PREMIUM"], "description": "B7 is standard diesel; B7_PREMIUM is premium diesel. Grades are never substituted." },
           "vehicle": { "type": "object", "required": ["mpgImperial"], "properties": { "mpgImperial": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "5 to 200." } } },
           "litresToBuy": { "type": "string", "pattern": "^\\d{1,4}(\\.\\d{1,3})?$", "description": "1 to 500." },
           "limits": { "type": "object", "properties": { "maxExtraDistanceMetres": { "type": "integer", "minimum": 1, "maximum": 200000 }, "maxExtraDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 14400 } } }
@@ -95,7 +95,7 @@
         "required": ["calculationVersion", "mode", "status", "scope", "coverage", "routing", "feed", "baseline", "reference", "labels", "candidates", "excluded"],
         "properties": {
           "calculationVersion": { "type": "string" },
-          "mode": { "enum": ["along_journey", "fuel_trip"] },
+          "mode": { "enum": ["along_journey", "fuel_trip", "fuel_trip_one_way"] },
           "status": { "enum": ["ranked", "no_candidates"] },
           "scope": { "type": "string" },
           "coverage": { "type": "object", "required": ["stationsInSearchArea", "closedNowExcluded", "stationsRouted", "routingCalls", "partial", "notRouted", "excludedByLimits"] },

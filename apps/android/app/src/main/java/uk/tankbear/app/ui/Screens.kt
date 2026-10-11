@@ -29,9 +29,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import uk.tankbear.app.data.Validation
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import uk.tankbear.app.BuildConfig
 import uk.tankbear.app.R
 import androidx.core.content.ContextCompat
 import uk.tankbear.app.data.NearbyStation
@@ -80,23 +83,27 @@ fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
             Choice<Mode>("Fuel trip (there and back from here)", vm.mode == Mode.FuelTrip) { vm.mode = Mode.FuelTrip }
             Choice<Mode>("Nearby stations (no journey)", vm.mode == Mode.Nearby) { vm.mode = Mode.Nearby }
         }
-        Text("Start", style = MaterialTheme.typography.titleMedium)
-        CoordinateRow(vm.originLat, vm.originLon, { vm.originLat = it }, { vm.originLon = it }, "Start")
+        Text(if (Validation.point(vm.originLat, vm.originLon) == null) "Start: not set" else "Start: location selected")
+        OutlinedButton(onClick = { vm.beginMapChoice(MapTarget.Start); onShowOnMap() }) { Text("Choose start on map") }
         LocationButton(vm)
         if (vm.mode == Mode.AlongJourney) {
-            Text("Destination", style = MaterialTheme.typography.titleMedium)
-            CoordinateRow(vm.destLat, vm.destLon, { vm.destLat = it }, { vm.destLon = it }, "Destination")
+            Text(if (Validation.point(vm.destLat, vm.destLon) == null) "Destination: not set" else "Destination: location selected")
+            OutlinedButton(onClick = { vm.beginMapChoice(MapTarget.Destination); onShowOnMap() }) { Text("Choose destination on map") }
+        }
+        var coordinatesExpanded by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { coordinatesExpanded = !coordinatesExpanded }) { Text(if (coordinatesExpanded) "Hide coordinates" else "Enter coordinates (optional)") }
+        if (coordinatesExpanded) {
+            CoordinateRow(vm.originLat, vm.originLon, { vm.originLat = it }, { vm.originLon = it }, "Start")
+            if (vm.mode == Mode.AlongJourney) CoordinateRow(vm.destLat, vm.destLon, { vm.destLat = it }, { vm.destLon = it }, "Destination")
         }
         SavedPlaces(vm)
         OutlinedButton(onClick = vm::useExample) { Text("Fill in an example (Reading to Oxford)") }
-        Text(
-            "Enter coordinates in decimal degrees, use your location, pick a saved place, or long-press the Map tab.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
-        val loading = vm.search is SearchState.Loading
-        Button(onClick = vm::submit, enabled = !loading, modifier = Modifier.fillMaxWidth()) { Text(if (vm.mode == Mode.Nearby) "Find nearby stations" else "Find the best stop") }
+        if (vm.resultsOutdated) {
+            Text("Previous results are outdated. Update results for your new locations or car settings.")
+            return@Column
+        }
         if (vm.mode == Mode.Nearby) {
+            if (vm.nearby is NearbyState.Done) OutlinedButton(onClick = onShowOnMap) { Text("Map and results") }
             NearbySection(vm)
             return@Column
         }
@@ -182,8 +189,8 @@ private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, 
             Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
             Text("${Formatting.pricePerLitre(c.pencePerLitre)} · price changed ${Formatting.age(c.priceLastUpdated, now)}")
             Text(Formatting.opening(c.opening), style = MaterialTheme.typography.bodyMedium)
-            Text("Extra driving: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
-            Text("Pump saving ${Formatting.pence(c.pumpSavingPence)}, extra fuel to get there ${Formatting.pence(c.detourFuelCostPence)}")
+            Text("${if (r.baselineGeometry != null) "Extra driving" else if (r.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
+            Text("Fill ${Formatting.pence(c.fillCostPence)} + ${if (r.baselineGeometry != null) "detour" else if (r.oneWay) "one-way driving" else "return driving"} fuel ${Formatting.pence(c.detourFuelCostPence)}")
             val headline = if (c.stationId == r.referenceStationId) "This is the comparison station" else Formatting.savingHeadline(c.trueSavingPence, referenceName)
             Text(headline, style = MaterialTheme.typography.titleSmall)
             if (c.stationId != r.referenceStationId && Formatting.isSmallDifference(c.trueSavingPence)) {
@@ -226,6 +233,12 @@ fun SettingsScreen(vm: AppViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("You’re in control", style = MaterialTheme.typography.headlineSmall)
         Text("No account needed. Tank Bear will ask before using your location.", style = MaterialTheme.typography.bodyLarge)
+        Text("Connected to Tank Bear. No account or app key is needed for the friend beta.")
+        Text("Your search locations are sent to Tank Bear when you tap Find. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.")
+        if (BuildConfig.DEBUG) {
+            var advanced by remember { mutableStateOf(false) }
+            TextButton(onClick = { advanced = !advanced }) { Text("Developer connection settings") }
+            if (advanced) {
         Text("Connection (development)", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             s.baseUrl, { v -> vm.update { it.copy(baseUrl = v) } }, label = { Text("Server address") }, singleLine = true,
@@ -240,6 +253,8 @@ fun SettingsScreen(vm: AppViewModel) {
                 "10.0.2.2 reaches a server on your computer from the Android emulator.",
             style = MaterialTheme.typography.bodyMedium,
         )
+            }
+        }
         Text("About the data", style = MaterialTheme.typography.titleMedium)
         DataAttribution()
         Text("Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.", style = MaterialTheme.typography.bodyMedium)
@@ -248,7 +263,7 @@ fun SettingsScreen(vm: AppViewModel) {
 
 
 @Composable
-private fun LocationButton(vm: AppViewModel) {
+internal fun LocationButton(vm: AppViewModel) {
     val context = LocalContext.current
     var blocked by remember { mutableStateOf(false) }
     var locating by remember { mutableStateOf(false) }
@@ -260,8 +275,8 @@ private fun LocationButton(vm: AppViewModel) {
             locating = false
             when (result) {
                 is LocationFetcher.Result.Found -> { blocked = false; vm.useLocation(result.point) }
-                LocationFetcher.Result.Unavailable -> vm.locationMessage = "Location is switched off in your phone's settings. Turn it on, or enter coordinates."
-                LocationFetcher.Result.NoFix -> vm.locationMessage = "Couldn't get a location fix. Try again, or enter coordinates."
+                LocationFetcher.Result.Unavailable -> vm.locationMessage = "Location is switched off in your phone's settings. Turn it on, or choose a point on the map."
+                LocationFetcher.Result.NoFix -> vm.locationMessage = "Couldn't get a location fix. Try again, or choose a point on the map."
             }
         }
     }
@@ -270,7 +285,7 @@ private fun LocationButton(vm: AppViewModel) {
         // Approximate location is enough, so either grant works.
         if (granted.values.any { it }) { blocked = false; locate() } else {
             blocked = true
-            vm.locationMessage = "Location permission is off. Allow it in the app's settings, or enter coordinates."
+            vm.locationMessage = "Location permission is off. Allow it in the app's settings, or choose a point on the map."
         }
     }
 
@@ -374,7 +389,7 @@ private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Insta
 
 
 @Composable
-private fun HistoryPanel(vm: AppViewModel, stationId: String, now: java.time.Instant) {
+internal fun HistoryPanel(vm: AppViewModel, stationId: String, now: java.time.Instant) {
     when (val h = vm.histories[stationId]) {
         null -> Unit
         HistoryState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

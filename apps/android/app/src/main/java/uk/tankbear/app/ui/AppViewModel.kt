@@ -29,14 +29,14 @@ enum class MapTarget { Start, Destination }
 sealed interface SearchState {
     data object Idle : SearchState
     data object Loading : SearchState
-    data class Done(val outcome: ApiOutcome.Ok, val at: java.time.Instant) : SearchState
+    data class Done(val outcome: ApiOutcome.Ok, val at: java.time.Instant, val inputs: SearchInputs) : SearchState
     data class Failed(val failure: ApiOutcome.Failure) : SearchState
 }
 
 sealed interface NearbyState {
     data object Idle : NearbyState
     data object Loading : NearbyState
-    data class Done(val result: NearbyResult, val at: java.time.Instant) : NearbyState
+    data class Done(val result: NearbyResult, val at: java.time.Instant, val inputs: SearchInputs) : NearbyState
     data class Failed(val failure: ApiOutcome.Failure) : NearbyState
 }
 
@@ -48,6 +48,14 @@ sealed interface HistoryState {
     data class Failed(val message: String) : HistoryState
 }
 
+/** In-memory search identity; never persisted or logged. */
+data class SearchInputs(val mode: Mode, val origin: LatLon?, val destination: LatLon?,
+    val fuel: FuelType, val mpg: String?, val litres: String)
+
+internal fun searchInputs(mode: Mode, origin: LatLon?, destination: LatLon?, saved: Saved) =
+    SearchInputs(mode, origin, if (mode == Mode.AlongJourney) destination else null,
+        saved.fuel, if (mode == Mode.Nearby) null else saved.mpg.trim(), saved.litres.trim())
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
 
@@ -56,7 +64,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var loaded by mutableStateOf(false)
         private set
 
-    var mode by mutableStateOf(Mode.AlongJourney)
+    private var currentMode by mutableStateOf(Mode.AlongJourney)
+    var mode: Mode
+        get() = currentMode
+        set(value) {
+            if (currentMode == value) return
+            currentMode = value
+            cancel()
+            formError = null
+            choosingMapLocation = false
+            mapTarget = MapTarget.Start
+            selectedStationId = null
+        }
     var originLat by mutableStateOf("")
     var originLon by mutableStateOf("")
     var destLat by mutableStateOf("")
@@ -72,7 +91,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleHistory(stationId: String) {
         if (histories.containsKey(stationId)) { histories.remove(stationId); return }
-        if (saved.appKey.isBlank()) { histories[stationId] = HistoryState.Failed("Add the app key in Settings."); return }
         histories[stationId] = HistoryState.Loading
         viewModelScope.launch {
             histories[stationId] = when (val o = OptimiseClient(saved.baseUrl, saved.appKey).history(stationId, saved.fuel)) {
@@ -86,11 +104,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var nearby by mutableStateOf<NearbyState>(NearbyState.Idle)
         private set
     var nearbySort by mutableStateOf(NearbySort.Closest)
+    var routeSort by mutableStateOf(RouteSort.Total)
+    var mapOpenOnly by mutableStateOf(false)
     var locationMessage by mutableStateOf<String?>(null)
     var placeMessage by mutableStateOf<String?>(null)
         private set
 
-    /** What a long-press on the map sets. */
+    /** Which endpoint the explicit map picker is choosing. */
     var mapTarget by mutableStateOf(MapTarget.Start)
     var selectedStationId by mutableStateOf<String?>(null)
         private set
@@ -98,9 +118,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var fitCount by mutableStateOf(0)
         private set
 
+    var choosingMapLocation by mutableStateOf(false)
+    fun beginMapChoice(target: MapTarget) { mapTarget = target; choosingMapLocation = true }
+
+    val inputs: SearchInputs get() = searchInputs(mode, Validation.point(originLat, originLon),
+        Validation.point(destLat, destLon), saved)
+    val resultsOutdated: Boolean get() {
+        val previous = if (mode == Mode.Nearby) (nearby as? NearbyState.Done)?.inputs else (search as? SearchState.Done)?.inputs
+        return previous != null && previous != inputs
+    }
+    val loading: Boolean get() = if (mode == Mode.Nearby) nearby is NearbyState.Loading else search is SearchState.Loading
+
     val result: JourneyResult? get() = (search as? SearchState.Done)?.outcome?.result
 
     fun setFromMap(point: LatLon) {
+        if (Validation.point(point.lat.toString(), point.lon.toString()) == null) {
+            formError = "Choose a location inside the UK."; return
+        }
+        formError = null
+        choosingMapLocation = false
         val lat = "%.5f".format(java.util.Locale.UK, point.lat)
         val lon = "%.5f".format(java.util.Locale.UK, point.lon)
         if (mapTarget == MapTarget.Start || mode != Mode.AlongJourney) { originLat = lat; originLon = lon } else { destLat = lat; destLon = lon }
@@ -116,7 +152,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun update(change: (Saved) -> Saved) {
+        val previousFuel = saved.fuel
         saved = change(saved)
+        if (saved.fuel != previousFuel) histories.clear()
         viewModelScope.launch { prefs.save(saved) }
     }
 
@@ -157,14 +195,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun searchNearby() {
-        val origin = Validation.point(originLat, originLon) ?: return fail("Enter the start as latitude and longitude inside the UK, or use your location.")
+        val origin = Validation.point(originLat, originLon) ?: return fail("Choose your start on the map or use your location.")
         val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
-        if (saved.appKey.isBlank()) return fail("Add the app key in Settings.")
         job?.cancel()
+        val submittedInputs = inputs
+        val connection = saved
+        histories.clear()
         nearby = NearbyState.Loading
         job = viewModelScope.launch {
-            nearby = when (val outcome = OptimiseClient(saved.baseUrl, saved.appKey).nearby(origin, saved.fuel, litres)) {
-                is ApiOutcome.NearbyOk -> NearbyState.Done(outcome.result, java.time.Instant.now())
+            nearby = when (val outcome = OptimiseClient(connection.baseUrl, connection.appKey).nearby(origin, submittedInputs.fuel, litres)) {
+                is ApiOutcome.NearbyOk -> {
+                    selectedStationId = outcome.result.stations.firstOrNull()?.id
+                    fitCount++
+                    NearbyState.Done(outcome.result, java.time.Instant.now(), submittedInputs)
+                }
                 is ApiOutcome.Failure -> NearbyState.Failed(outcome)
                 is ApiOutcome.Ok, is ApiOutcome.HistoryOk -> NearbyState.Idle
             }
@@ -175,22 +219,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         formError = null
         if (mode == Mode.Nearby) return searchNearby()
         val origin = Validation.point(originLat, originLon)
-            ?: return fail("Enter the start as latitude and longitude inside the UK.")
+            ?: return fail("Choose your start on the map or use your location.")
         val destination = if (mode == Mode.AlongJourney) {
-            Validation.point(destLat, destLon) ?: return fail("Enter the destination as latitude and longitude inside the UK.")
+            Validation.point(destLat, destLon) ?: return fail("Choose your destination on the map.")
         } else null
         val mpg = Validation.mpg(saved.mpg) ?: return fail("Set your car's Imperial MPG (5 to 200) on the Car tab.")
         val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
-        if (saved.appKey.isBlank()) return fail("Add the app key in Settings.")
         val request = JourneyRequest(mode, origin, destination, saved.fuel, mpg, litres)
         job?.cancel()
+        val submittedInputs = inputs
+        val connection = saved
+        histories.clear()
         search = SearchState.Loading
         job = viewModelScope.launch {
-            search = when (val outcome = OptimiseClient(saved.baseUrl, saved.appKey).optimise(request)) {
+            search = when (val outcome = OptimiseClient(connection.baseUrl, connection.appKey).optimise(request)) {
                 is ApiOutcome.Ok -> {
                     selectedStationId = outcome.result.candidates.firstOrNull()?.stationId
                     fitCount++
-                    SearchState.Done(outcome, java.time.Instant.now())
+                    SearchState.Done(outcome, java.time.Instant.now(), submittedInputs)
                 }
                 is ApiOutcome.Failure -> SearchState.Failed(outcome)
                 is ApiOutcome.NearbyOk, is ApiOutcome.HistoryOk -> SearchState.Idle

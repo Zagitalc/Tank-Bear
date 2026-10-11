@@ -23,6 +23,7 @@ class AppNavigationTest {
     /** Saved places persist on the device between runs; start every test with none so labels are unambiguous. */
     @Before
     fun removeAnySavedPlaces() {
+        compose.onNodeWithText("Find").performClick()
         while (compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isNotEmpty()) {
             compose.onAllNodesWithText("Remove")[0].performScrollTo().performClick()
             compose.waitForIdle()
@@ -53,16 +54,32 @@ class AppNavigationTest {
     }
 
     @Test
+    fun mapChoiceIsExplicitAndSearchStaysReachable() {
+        compose.onNodeWithText("Find the best stop").assertIsDisplayed()
+        compose.onNodeWithText("Start latitude").assertDoesNotExist()
+        compose.onNodeWithText("Choose start on map").performScrollTo().performClick()
+        compose.onNodeWithText("Use this location").assertIsDisplayed()
+        compose.onNodeWithText("Confirm your map location first").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Choose start").assertIsDisplayed()
+        compose.onNodeWithText("Find the best stop").assertIsDisplayed()
+        tab("Find").performClick()
+        compose.onNodeWithText("Enter coordinates (optional)").performScrollTo().performClick()
+        compose.onNodeWithText("Start latitude").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Find the best stop").assertIsDisplayed()
+    }
+
+    @Test
     fun eachModeShowsOnlyTheFieldsItNeeds() {
-        compose.onNodeWithText("Destination").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose destination on map").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Fuel trip (there and back from here)").performScrollTo().performClick()
-        compose.onNodeWithText("Destination").assertDoesNotExist()
-        compose.onNodeWithText("Find the best stop").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose destination on map").assertDoesNotExist()
+        compose.onNodeWithText("Find the best stop").assertIsDisplayed()
         compose.onNodeWithText("Nearby stations (no journey)").performScrollTo().performClick()
-        compose.onNodeWithText("Destination").assertDoesNotExist()
-        compose.onNodeWithText("Find nearby stations").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose destination on map").assertDoesNotExist()
+        compose.onNodeWithText("Find nearby stations").assertIsDisplayed()
         compose.onNodeWithText("Along my journey").performScrollTo().performClick()
-        compose.onNodeWithText("Destination").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose destination on map").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -71,8 +88,8 @@ class AppNavigationTest {
         compose.onNodeWithText("Miles per Imperial gallon (MPG)").performTextReplacement("")
         tab("Find").performClick()
         compose.onNodeWithText("Fill in an example (Reading to Oxford)").performScrollTo().performClick()
-        compose.onNodeWithText("Find the best stop").performScrollTo().performClick()
-        compose.onNodeWithText("Set your car's Imperial MPG", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Find the best stop").performClick()
+        compose.onNodeWithText("Set your car's Imperial MPG", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -92,7 +109,7 @@ class AppNavigationTest {
     fun theMapTabExplainsItselfBeforeAnySearch() {
         tab("Map").performClick()
         compose.onNodeWithText("Long-press the map to set the start").assertIsDisplayed()
-        compose.onNodeWithText("Destination").assertIsDisplayed()
+        compose.onNodeWithText("Choose destination on map").assertIsDisplayed()
         compose.onNodeWithText("Run a search on the Find tab", substring = true).assertIsDisplayed()
     }
 }

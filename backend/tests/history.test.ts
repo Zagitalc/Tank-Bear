@@ -125,7 +125,7 @@ test("a window with many missed refreshes is not called a trend", async () => {
 test("history validates input, needs the key, and 404s unknown stations", async () => {
   const { db } = seed({ watchedDays: 8 });
   assert.equal((await get(db, `/v1/stations/${ID}/history?fuelType=E10`, null)).status, 401);
-  for (const q of ["", "?fuelType=E5", "?fuelType=E10&days=0", "?fuelType=E10&days=99", "?fuelType=E10&days=x"]) {
+  for (const q of ["", "?fuelType=HVO", "?fuelType=E10&days=0", "?fuelType=E10&days=99", "?fuelType=E10&days=x"]) {
     assert.equal((await get(db, `/v1/stations/${ID}/history${q}`)).status, 400, q);
   }
   assert.equal((await get(db, `/v1/stations/not-an-id/history?fuelType=E10`)).status, 400);
@@ -189,3 +189,29 @@ test("every response carrying prices names Fuel Finder/ICS, as the provider requ
   const nearby = (await (await get(db, "/v1/stations/nearby?lat=51.45&lon=-0.97")).json()) as any;
   assert.equal(nearby.feed.attribution, "Fuel Finder/ICS");
 });
+
+for (const fuel of ["E5", "B7_PREMIUM"]) {
+  test(`${fuel} nearby and history use only that grade, including missing prices`, async () => {
+    const { db, sql } = seed({ watchedDays: 8 });
+    const historyPath = `/v1/stations/${ID}/history?fuelType=${fuel}`;
+    const nearbyPath = `/v1/stations/nearby?lat=51.45&lon=-0.97&fuelType=${fuel}&litres=30`;
+    const missingHistory = await get(db, historyPath);
+    assert.equal(missingHistory.status, 200);
+    const missing = await missingHistory.json() as any;
+    assert.equal(missing.current, null);
+    assert.equal(missing.points.length, 0);
+    const noFill = await (await get(db, nearbyPath)).json() as any;
+    assert.equal(noFill.stations[0].fill, null);
+    sql.prepare(`INSERT INTO current_prices VALUES (?,?,?,?,?,?)`).run(ID, fuel, "159.9", day(1), day(1), day(1));
+    sql.prepare(`INSERT INTO price_changes (node_id, feed_fuel_type, pence_per_litre, price_last_updated, price_change_effective, observed_at) VALUES (?,?,?,?,?,?)`)
+      .run(ID, fuel, "159.9", day(1), day(1), day(1));
+    const history = await (await get(db, historyPath)).json() as any;
+    assert.equal(history.fuelType, fuel);
+    assert.equal(history.current.pencePerLitre, "159.9");
+    assert.deepEqual(history.points.map((p: any) => p.pencePerLitre), ["159.9"]);
+    const nearby = await (await get(db, nearbyPath)).json() as any;
+    assert.equal(nearby.stations[0].fill.feedFuelType, fuel);
+    assert.equal(nearby.stations[0].fill.fillCostPence, 4797);
+    assert.equal(nearby.localSummary.medianPencePerLitre, "159.9");
+  });
+}
