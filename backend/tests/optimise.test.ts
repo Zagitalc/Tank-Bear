@@ -167,7 +167,7 @@ test("request validation, media type, size and configuration are enforced before
   const repo = createFuelRepository(noDb);
   const e = engine();
   const bad: Record<string, unknown>[] = [
-    { mode: "nearby" }, { origin: { lat: 0, lon: 0 } }, { fuelType: "E5" }, { vehicle: { mpgImperial: "0" } }, { vehicle: {} },
+    { mode: "nearby" }, { origin: { lat: 0, lon: 0 } }, { fuelType: "HVO" }, { vehicle: { mpgImperial: "0" } }, { vehicle: {} },
     { litresToBuy: "1e2" }, { litresToBuy: "9999" }, { limits: { maxExtraDistanceMetres: -1 } }, { mode: "fuel_trip" /* has destination */ },
   ];
   for (const over of bad) {
@@ -227,3 +227,27 @@ test("the OpenAPI contract names every field the optimise response actually retu
   assert.ok(spec.paths["/v1/journeys/optimise"].post.responses["429"]);
   assert.equal(spec.components.securitySchemes.AppKey.name, "X-Tank-Bear-Key");
 });
+
+for (const [fuelType, feedCode] of [["E10", "E10"], ["E5", "E5"], ["B7", "B7_STANDARD"], ["B7_PREMIUM", "B7_PREMIUM"]] as const) {
+  test(`optimisation isolates ${fuelType} prices from all other grades`, async () => {
+    const s = seed();
+    const chosen = s.add("RequestedGrade", onRoute(0.5), "160.0", { fuel: feedCode });
+    for (const other of ["E10", "E5", "B7_STANDARD", "B7_PREMIUM"].filter((x) => x !== feedCode)) {
+      s.add(other, onRoute(0.5, 0.001), "90.0", { fuel: other });
+    }
+    const { res, body } = await run(s, engine(), { fuelType });
+    assert.equal(res.status, 200);
+    assert.deepEqual(body.candidates.map((c: any) => c.stationId), [chosen]);
+    assert.equal(body.candidates[0].fillCostPence, 4800);
+  });
+}
+
+for (const fuelType of ["E5", "B7_PREMIUM"]) {
+  test(`missing ${fuelType} never substitutes a standard grade for routing`, async () => {
+    const s = seed();
+    s.add("StandardPetrol", onRoute(0.5), "90.0");
+    s.add("StandardDiesel", onRoute(0.5), "90.0", { fuel: "B7_STANDARD" });
+    const { body } = await run(s, engine(), { fuelType });
+    assert.equal(body.candidates.length, 0);
+  });
+}

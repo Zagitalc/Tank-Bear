@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -41,15 +42,18 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
     TankBearTheme {
         Scaffold(
             bottomBar = {
-                NavigationBar {
+                Column {
+                  if (selected == Destination.Find || selected == Destination.Map) SearchActionBar(vm)
+                  NavigationBar {
                     Destination.entries.forEach { destination ->
                         NavigationBarItem(
                             selected = selected == destination,
-                            onClick = { selected = destination },
+                            onClick = { selected = destination; if (destination != Destination.Map) vm.choosingMapLocation = false },
                             icon = { Icon(painterResource(destination.icon), contentDescription = null) },
                             label = { Text(stringResource(destination.label)) },
                         )
                     }
+                }
                 }
             },
         ) { padding ->
@@ -72,6 +76,30 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                         else -> SettingsScreen(vm)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Shared fixed action: search is always reachable without scrolling on Find and Map. */
+@Composable
+internal fun SearchActionBar(vm: AppViewModel) {
+    androidx.compose.material3.Surface(tonalElevation = 2.dp) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (vm.resultsOutdated) Text("Inputs changed — previous results are outdated.", style = MaterialTheme.typography.bodySmall)
+            androidx.compose.material3.Button(
+                onClick = { if (vm.loading) vm.cancel() else vm.submit() },
+                enabled = vm.loaded && !vm.choosingMapLocation,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(when {
+                    vm.choosingMapLocation -> "Confirm your map location first"
+                    vm.loading -> "Cancel search"
+                    vm.resultsOutdated -> "Update results"
+                    vm.mode == uk.tankbear.app.data.Mode.Nearby -> "Find nearby stations"
+                    else -> "Find the best stop"
+                })
             }
         }
     }

@@ -2,6 +2,7 @@ package uk.tankbear.app.data
 
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -28,11 +29,13 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 if (status == 200) {
                     ApiOutcome.Ok(ResultParser.parse(text))
                 } else {
-                    failure(status, ResultParser.errorCode(text), connection.getHeaderField("Retry-After")?.toIntOrNull())
+                    responseFailure(status, text, connection.getHeaderField("Retry-After")?.toIntOrNull(), request.fuelType)
                 }
             } finally {
                 connection.disconnect()
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
         }
@@ -54,10 +57,12 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                 val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 if (status == 200) ApiOutcome.NearbyOk(ResultParser.parseNearby(text))
-                else failure(status, ResultParser.errorCode(text), connection.getHeaderField("Retry-After")?.toIntOrNull())
+                else responseFailure(status, text, connection.getHeaderField("Retry-After")?.toIntOrNull(), fuel)
             } finally {
                 connection.disconnect()
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
         }
@@ -77,10 +82,12 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 val stream = if (status in 200..299) connection.inputStream else connection.errorStream
                 val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 if (status == 200) ApiOutcome.HistoryOk(ResultParser.parseHistory(text))
-                else failure(status, ResultParser.errorCode(text), connection.getHeaderField("Retry-After")?.toIntOrNull())
+                else responseFailure(status, text, connection.getHeaderField("Retry-After")?.toIntOrNull(), fuel)
             } finally {
                 connection.disconnect()
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             ApiOutcome.Failure(FailureKind.Network, "Couldn't reach Tank Bear. Check your connection and the server address in Settings.")
         }
@@ -98,6 +105,22 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
 
         private fun point(p: LatLon) = JSONObject().put("lat", p.lat).put("lon", p.lon)
 
+        /** Recognise only known legacy validation messages, never display arbitrary server text. */
+        fun responseFailure(status: Int, text: String, retryAfter: Int?, fuel: FuelType): ApiOutcome.Failure {
+            val error = runCatching { JSONObject(text).optJSONObject("error") }.getOrNull()
+            val legacyGradeMessages = setOf(
+                "fuelType must be \"E10\" or \"B7\" (standard diesel).",
+                "fuelType must be E10 or B7.",
+                "fuelType (E10 or B7) and litres (1 to 500) go together.",
+            )
+            if (status == 400 && error?.optString("code") == "INVALID_REQUEST" &&
+                fuel in setOf(FuelType.E5, FuelType.B7_PREMIUM) && error.optString("message") in legacyGradeMessages) {
+                return ApiOutcome.Failure(FailureKind.Server,
+                    "${fuel.label} isn't supported by this server version yet. Tank Bear needs a server update. Your location and MPG aren't the cause.")
+            }
+            return failure(status, ResultParser.errorCode(text), retryAfter)
+        }
+
         fun failure(status: Int, code: String?, retryAfter: Int?): ApiOutcome.Failure = when {
             status == 401 || code == "UNAUTHORISED" ->
                 ApiOutcome.Failure(FailureKind.Unauthorised, "The app key was not accepted. Check it in Settings.")
@@ -111,7 +134,7 @@ class OptimiseClient(private val baseUrl: String, private val appKey: String) {
                 ApiOutcome.Failure(FailureKind.Invalid, "This route uses a ferry or toll, so costs can't be compared reliably.")
             code == "NO_FUEL_DATA" || code == "FUEL_DATA_STALE" ->
                 ApiOutcome.Failure(FailureKind.NoData, "Fuel prices aren't up to date right now, so Tank Bear won't recommend a stop.")
-            status == 400 -> ApiOutcome.Failure(FailureKind.Invalid, "Those details weren't accepted. Check the coordinates and car details.")
+            status == 400 -> ApiOutcome.Failure(FailureKind.Invalid, "The server rejected this search. Try again; if it keeps happening, report it as an app/server compatibility problem.")
             else -> ApiOutcome.Failure(FailureKind.Server, "Tank Bear's server couldn't answer. Try again later.")
         }
     }

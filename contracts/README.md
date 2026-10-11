@@ -17,7 +17,7 @@ fixtures. They do not independently implement the authoritative ranking engine.
 ## Stage 5: `POST /v1/journeys/optimise` (implemented, unversioned draft)
 
 Request: `mode` (`along_journey` or `fuel_trip`), `origin`, `destination` (journeys
-only), `fuelType` (`E10` or `B7`), `vehicle.mpgImperial` and `litresToBuy` as decimal
+only), `fuelType` (`E10`, `E5`, `B7` for standard diesel, or `B7_PREMIUM`), `vehicle.mpgImperial` and `litresToBuy` as decimal
 strings, optional `limits.maxExtraDistanceMetres` / `maxExtraDurationSeconds`. Coordinates
 must be inside the UK. Response: `scope` ("Best among the stations checked."), `coverage`
 (stations in the search area, routed, not routed with reasons, limit exclusions, partial

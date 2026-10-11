@@ -238,7 +238,7 @@ test("nearby can return the fill cost for one fuel using the economics rounding,
   assert.equal(ok.stations[0].fill.pencePerLitre, "139.9");
   const diesel = (await (await get("&fuelType=B7&litres=30")).json()) as any;
   assert.equal(diesel.stations[0].fill, null); // No diesel price here: nothing invented.
-  for (const q of ["&fuelType=E10", "&litres=30", "&fuelType=E5&litres=30", "&fuelType=E10&litres=0", "&fuelType=E10&litres=1e2"]) {
+  for (const q of ["&fuelType=E10", "&litres=30", "&fuelType=HVO&litres=30", "&fuelType=E10&litres=0", "&fuelType=E10&litres=1e2"]) {
     assert.equal((await get(q)).status, 400, q);
   }
   const plain = (await (await get("")).json()) as any;

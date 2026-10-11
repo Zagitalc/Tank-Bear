@@ -2,7 +2,9 @@ package uk.tankbear.app.data
 
 enum class FuelType(val api: String, val label: String) {
     E10("E10", "Petrol (E10)"),
+    E5("E5", "Petrol (E5)"),
     B7("B7", "Diesel (standard)"),
+    B7_PREMIUM("B7_PREMIUM", "Diesel (premium)"),
 }
 
 enum class Mode(val api: String) { AlongJourney("along_journey"), FuelTrip("fuel_trip"), Nearby("nearby") }

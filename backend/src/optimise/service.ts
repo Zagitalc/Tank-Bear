@@ -1,3 +1,4 @@
+import { FEED_FUEL } from "../domain/fuels.ts";
 import { ATTRIBUTION } from "../domain/attribution.ts";
 import { CalculationInputError, rankFuelStops } from "../domain/economics.ts";
 import type { Coordinates, ObservedPrice } from "../domain/types.ts";
@@ -28,7 +29,6 @@ export interface ServiceResult {
 }
 
 const err = (status: number, code: string, message: string): ServiceResult => ({ status, body: { error: { code, message } } });
-const feedFuel = (f: "E10" | "B7") => (f === "E10" ? "E10" : "B7_STANDARD");
 
 class TooLong extends Error {}
 
@@ -56,7 +56,7 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
           : buildLine([[req.origin.lat, req.origin.lon], [req.origin.lat, req.origin.lon]]);
         const corridor = baseline ? undefined : FUEL_TRIP_RADIUS_METRES;
         const boxes = corridorBoxes(line, (corridor ?? 3000) + 500);
-        const all = await deps.repo.pricedStationsInBoxes(boxes, feedFuel(req.fuelType));
+        const all = await deps.repo.pricedStationsInBoxes(boxes, FEED_FUEL[req.fuelType]);
         // Stations that are closed right now by their usual hours are not offered. Unknown hours stay in,
         // flagged. Arrival may be later than now, so "open" is not a promise (see docs/routing.md).
         const at = new Date(nowMs);

@@ -1,5 +1,5 @@
-/** These are normalized domain values, not the unverified Fuel Finder schema. */
-export type FuelType = "E10" | "B7";
+/** Normalized API values; domain/fuels.ts maps them to verified feed codes. */
+export type FuelType = "E10" | "E5" | "B7" | "B7_PREMIUM";
 
 export interface Coordinates {
   lat: number;

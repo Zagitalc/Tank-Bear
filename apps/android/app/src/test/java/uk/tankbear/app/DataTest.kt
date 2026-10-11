@@ -24,6 +24,36 @@ import uk.tankbear.app.data.Validation
 class DataTest {
     private val sample = javaClass.classLoader!!.getResource("optimise-response-sample.json")!!.readText()
 
+    @Test fun changedSearchInputsInvalidateOnlyRelevantResults() {
+        val start = LatLon(51.45, -0.97)
+        val end = LatLon(51.75, -1.25)
+        val car = uk.tankbear.app.data.Saved(mpg = "40")
+        fun inputs(mode: Mode = Mode.AlongJourney, saved: uk.tankbear.app.data.Saved = car,
+            origin: LatLon = start, destination: LatLon = end) = uk.tankbear.app.ui.searchInputs(mode, origin, destination, saved)
+        val original = inputs()
+        assertFalse(original == inputs(saved = car.copy(mpg = "45")))
+        assertFalse(original == inputs(saved = car.copy(fuel = FuelType.B7)))
+        assertFalse(original == inputs(saved = car.copy(litres = "50")))
+        assertFalse(original == inputs(origin = end))
+        assertFalse(original == inputs(destination = start))
+        assertFalse(original == inputs(mode = Mode.FuelTrip))
+        assertEquals(inputs(Mode.Nearby), inputs(Mode.Nearby, car.copy(mpg = "45"), destination = start))
+        assertEquals(inputs(Mode.FuelTrip), inputs(Mode.FuelTrip, destination = start))
+        assertEquals(original, inputs(saved = car.copy(places = listOf(uk.tankbear.app.data.SavedPlace("Example", start)))))
+    }
+
+    @Test fun mapSortingUsesNumericValuesAndPreservesBackendRanksAndCosts() {
+        val base = ResultParser.parse(sample).candidates.first()
+        val first = base.copy(stationId = "a", rank = 1, pencePerLitre = "100", detourDurationSeconds = "100")
+        val second = base.copy(stationId = "b", rank = 2, pencePerLitre = "99.9", detourDurationSeconds = "20")
+        val tied = base.copy(stationId = "c", rank = 3, pencePerLitre = "99.90", detourDurationSeconds = "20.0")
+        val input = listOf(tied, first, second)
+        assertEquals(listOf(first, second, tied), uk.tankbear.app.ui.orderedCandidates(input, uk.tankbear.app.ui.RouteSort.Total))
+        assertEquals(listOf(second, tied, first), uk.tankbear.app.ui.orderedCandidates(input, uk.tankbear.app.ui.RouteSort.Pump))
+        assertEquals(listOf(second, tied, first), uk.tankbear.app.ui.orderedCandidates(input, uk.tankbear.app.ui.RouteSort.Detour))
+        assertEquals(listOf(tied, first, second), input)
+    }
+
     @Test fun parsesTheSharedBackendFixture() {
         val r = ResultParser.parse(sample)
         assertTrue(r.ranked)
@@ -37,6 +67,14 @@ class DataTest {
         assertTrue(r.candidates.first().trueSavingPence > 0)
     }
 
+    @Test fun allFourFuelChoicesSendDistinctApiGrades() {
+        assertEquals(listOf("E10", "E5", "B7", "B7_PREMIUM"), FuelType.entries.map { it.api })
+        for (fuel in FuelType.entries) {
+            val body = JSONObject(OptimiseClient.body(JourneyRequest(Mode.FuelTrip, LatLon(51.45, -0.97), null, fuel, "40", "30")))
+            assertEquals(fuel.api, body.getString("fuelType"))
+        }
+    }
+
     @Test fun requestBodyMatchesTheContract() {
         val body = JSONObject(OptimiseClient.body(JourneyRequest(Mode.AlongJourney, LatLon(51.45, -0.97), LatLon(51.75, -1.25), FuelType.B7, "45", "30")))
         assertEquals("along_journey", body.getString("mode"))
@@ -45,6 +83,20 @@ class DataTest {
         assertEquals("30", body.getString("litresToBuy"))
         val trip = JSONObject(OptimiseClient.body(JourneyRequest(Mode.FuelTrip, LatLon(51.45, -0.97), null, FuelType.E10, "45", "30")))
         assertFalse(trip.has("destination"))
+    }
+
+    @Test fun legacyServerGradeRejectionDoesNotBlameCoordinatesOrMpg() {
+        val legacy = JSONObject().put("error", JSONObject().put("code", "INVALID_REQUEST")
+            .put("message", "fuelType must be \"E10\" or \"B7\" (standard diesel).")).toString()
+        for (fuel in listOf(FuelType.E5, FuelType.B7_PREMIUM)) {
+            val failure = OptimiseClient.responseFailure(400, legacy, null, fuel)
+            assertEquals(FailureKind.Server, failure.kind)
+            assertTrue(failure.message.contains("needs a server update"))
+        }
+        assertEquals(FailureKind.Invalid, OptimiseClient.responseFailure(400, legacy, null, FuelType.E10).kind)
+        assertEquals(FailureKind.Unauthorised, OptimiseClient.responseFailure(401, legacy, null, FuelType.E5).kind)
+        val arbitrary = """{"error":{"code":"INVALID_REQUEST","message":"private server internals"}}"""
+        assertFalse(OptimiseClient.responseFailure(400, arbitrary, null, FuelType.E5).message.contains("private server internals"))
     }
 
     @Test fun failuresAreExplainedWithoutBackendDetail() {

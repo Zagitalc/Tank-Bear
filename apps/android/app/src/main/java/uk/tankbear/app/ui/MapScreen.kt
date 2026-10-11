@@ -1,8 +1,11 @@
 package uk.tankbear.app.ui
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +54,7 @@ import org.maplibre.android.style.layers.PropertyFactory.circleColor
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
@@ -60,8 +68,6 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import uk.tankbear.app.R
-import uk.tankbear.app.data.Candidate
-import uk.tankbear.app.data.Formatting
 import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.Mode
 import uk.tankbear.app.data.Polyline
@@ -138,8 +144,8 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             m.cameraPosition = camera ?: CameraPosition.Builder()
                 .target(LatLng(MapConfig.INITIAL_LAT, MapConfig.INITIAL_LON)).zoom(MapConfig.INITIAL_ZOOM).build()
             m.addOnCameraIdleListener { camera = m.cameraPosition }
-            m.addOnMapLongClickListener { p -> vm.setFromMap(LatLon(p.latitude, p.longitude)); true }
             m.addOnMapClickListener { p ->
+                if (vm.choosingMapLocation) return@addOnMapClickListener false
                 val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(p), STATION_LAYER, SELECTED_LAYER).firstOrNull()
                 val id = hit?.getStringProperty(ID)
                 if (id != null) { vm.selectStation(id); true } else false
@@ -159,17 +165,17 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 style.addImage("pump-selected", mapMarker(context, R.drawable.ic_petrol_station, 0xFFB26A00.toInt(), selected = true))
                 style.addImage("car-start", mapMarker(context, R.drawable.ic_car, 0xFF1B5E20.toInt()))
                 style.addLayer(SymbolLayer(STATION_LAYER, STATION_SRC).withProperties(
-                    iconImage("pump"), iconAllowOverlap(true), iconIgnorePlacement(true))
+                    iconImage("pump"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
                     .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(false))) })
                 style.addLayer(SymbolLayer(SELECTED_LAYER, STATION_SRC).withProperties(
-                    iconImage("pump-selected"), iconAllowOverlap(true), iconIgnorePlacement(true))
+                    iconImage("pump-selected"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
                     .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(true))) })
                 style.addSource(GeoJsonSource(PINS_SRC))
                 style.addLayer(CircleLayer(PINS_LAYER, PINS_SRC).withProperties(
                     circleRadius(9f), circleColor("#B71C1C"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f))
                     .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("destination"))) })
                 style.addLayer(SymbolLayer("start-car", PINS_SRC).withProperties(
-                    iconImage("car-start"), iconAllowOverlap(true), iconIgnorePlacement(true))
+                    iconImage("car-start"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
                     .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("start"))) })
                 styleReady = true
             }
@@ -177,10 +183,20 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    val result = vm.result
-    val selected = result?.candidates?.firstOrNull { it.stationId == vm.selectedStationId }
+    val nearby = if (!vm.resultsOutdated && vm.mode == Mode.Nearby) (vm.nearby as? NearbyState.Done)?.result else null
+    val result = if (!vm.resultsOutdated && vm.mode != Mode.Nearby) vm.result else null
+    val visibleCandidates = result?.candidates.orEmpty().filter { !vm.mapOpenOnly || it.opening.state == "open" }
+    val visibleNearby = nearby?.stations.orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
+    val selected = visibleCandidates.firstOrNull { it.stationId == vm.selectedStationId }
     val origin = Validation.point(vm.originLat, vm.originLon)
     val destination = if (vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
+
+    LaunchedEffect(map, vm.choosingMapLocation, vm.mapTarget) {
+        if (vm.choosingMapLocation) {
+            val target = if (vm.mapTarget == MapTarget.Destination) destination ?: origin else origin
+            target?.let { map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.lat, it.lon), 14.0)) }
+        }
+    }
 
     // Start and destination pins follow the entered coordinates.
     LaunchedEffect(map, styleReady, origin, destination) {
@@ -193,7 +209,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, result, selected?.stationId, fitRequest) {
+    LaunchedEffect(map, styleReady, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()
@@ -201,14 +217,15 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         val route = selected?.let { Polyline.decode(it.routeGeometry) }.orEmpty()
         style.getSourceAs<GeoJsonSource>(ROUTE_SRC)?.setGeoJson(lineOf(route))
         style.getSourceAs<GeoJsonSource>(STATION_SRC)?.setGeoJson(FeatureCollection.fromFeatures(
-            result?.candidates.orEmpty().map { c ->
-                Feature.fromGeometry(Point.fromLngLat(c.position.lon, c.position.lat)).also {
-                    it.addStringProperty(ID, c.stationId)
-                    it.addBooleanProperty(SELECTED, c.stationId == selected?.stationId)
+            (visibleCandidates.map { it.stationId to it.position } +
+                visibleNearby.map { it.id to it.position }).map { (id, position) ->
+                Feature.fromGeometry(Point.fromLngLat(position.lon, position.lat)).also {
+                    it.addStringProperty(ID, id)
+                    it.addBooleanProperty(SELECTED, id == vm.selectedStationId)
                 }
             }))
-        val extent = if (route.size >= 2) route else base
-        if (extent.size >= 2 && (vm.fitCount != fitted || fitRequest != fittedRequest)) {
+        val extent = if (nearby != null) visibleNearby.map { it.position } + listOfNotNull(origin) else if (route.size >= 2) route else base
+        if (!vm.choosingMapLocation && extent.size >= 2 && (vm.fitCount != fitted || fitRequest != fittedRequest)) {
             fittedRequest = fitRequest
             fitted = vm.fitCount
             val bounds = LatLngBounds.Builder().includes(extent.map { LatLng(it.lat, it.lon) }).build()
@@ -216,68 +233,54 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+      var panelFraction by rememberSaveable { mutableStateOf(0.48f) }
+      val availableHeight = maxHeight
+      val density = LocalDensity.current
+      val totalPixels = with(density) { maxHeight.toPx() }
+      Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-            Card(Modifier.align(Alignment.TopCenter).padding(12.dp)) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        if (vm.mode != Mode.AlongJourney) "Long-press the map to set your start" else "Long-press the map to set the ${vm.mapTarget.name.lowercase()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    if (vm.mode == Mode.AlongJourney) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            MapTarget.entries.forEach { t ->
-                                FilterChip(selected = vm.mapTarget == t, onClick = { vm.mapTarget = t }, label = { Text(t.name) })
-                            }
-                        }
+            if (vm.choosingMapLocation) {
+                Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
+                    contentDescription = "Selected location at map centre",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.Center).size(36.dp))
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                if (vm.choosingMapLocation) {
+                    Text("Move the map to choose your ${vm.mapTarget.name.lowercase()}.")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = map != null, onClick = {
+                            map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) }
+                        }) { Text("Use this location") }
+                        TextButton(onClick = { vm.choosingMapLocation = false }) { Text("Cancel") }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { vm.beginMapChoice(MapTarget.Start) }) { Text("Choose start") }
+                        if (vm.mode == Mode.AlongJourney) TextButton(onClick = { vm.beginMapChoice(MapTarget.Destination) }) { Text("Choose destination") }
                     }
                 }
             }
         }
-        val candidates = result?.candidates.orEmpty()
-        val selectedIndex = candidates.indexOfFirst { it.stationId == selected?.stationId }
-        StationPanel(selected, candidates.size, result?.baselineGeometry != null,
-            onPrevious = { if (selectedIndex > 0) vm.selectStation(candidates[selectedIndex - 1].stationId) },
-            onNext = { if (selectedIndex + 1 < candidates.size) vm.selectStation(candidates[selectedIndex + 1].stationId) },
-            hasPrevious = selectedIndex > 0, hasNext = selectedIndex >= 0 && selectedIndex + 1 < candidates.size,
-            onFit = { fitRequest++ })
-    }
-}
-
-@Composable
-internal fun StationPanel(c: Candidate?, total: Int, alongJourney: Boolean,
-    onPrevious: () -> Unit = {}, onNext: () -> Unit = {},
-    hasPrevious: Boolean = false, hasNext: Boolean = false, onFit: () -> Unit = {},
-) {
-    Card(Modifier.fillMaxWidth().padding(12.dp)) {
-        Column(Modifier.heightIn(max = 290.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (c == null) {
-                Text(
-                    if (total == 0) "Run a search on the Find tab to see stations and routes here." else "Tap a station to see its route.",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            } else {
-                Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
-                Text(Formatting.pricePerLitre(c.pencePerLitre))
-                val drivingLabel = if (alongJourney) "Extra detour fuel" else "Return-drive fuel"
-                Text("$drivingLabel: ${Formatting.pence(c.detourFuelCostPence)}",
-                    style = MaterialTheme.typography.titleMedium)
-                Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
-                Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)")
-                Text("${if (alongJourney) "Extra driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
-                Text(if (alongJourney) "Extra fuel versus your direct route, using the MPG and price used for this search."
-                    else "Fuel for the whole routed return trip, using the MPG and price used for this search.",
-                    style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onPrevious, enabled = hasPrevious) { Text("Previous") }
-                    TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
-                    TextButton(onClick = onFit) { Text("Fit route") }
+        if (!vm.choosingMapLocation) {
+        Column(Modifier.fillMaxWidth().height(availableHeight * panelFraction)) {
+            Row(Modifier.fillMaxWidth().draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta ->
+                    panelFraction = (panelFraction - delta / totalPixels).coerceIn(0.25f, 0.55f)
+                }), horizontalArrangement = Arrangement.SpaceEvenly) {
+                TextButton(onClick = { panelFraction = if (panelFraction < 0.5f) 0.55f else 0.25f }) {
+                    Text(if (panelFraction < 0.5f) "More results ↑" else "More map ↓")
                 }
-                Text(if (alongJourney) "Grey: direct route. Amber: via this station. Tap a pump to compare."
-                    else "Amber: your return route. Tap a pump to compare.", style = MaterialTheme.typography.bodySmall)
-                DataAttribution()
+                TextButton(onClick = { fitRequest++ }) { Text(if (nearby != null) "Fit stations" else "Fit route") }
             }
+            MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
         }
+        }
+      }
     }
 }

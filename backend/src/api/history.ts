@@ -1,23 +1,23 @@
+import { FEED_FUEL, isFuelType } from "../domain/fuels.ts";
 import { ATTRIBUTION } from "../domain/attribution.ts";
 import { assessCoverage, buildHistory } from "../history/series.ts";
 import type { FuelRepository } from "../repositories/fuel.ts";
 
 const headers = { "Cache-Control": "no-store" };
 const err = (status: number, code: string, message: string) => Response.json({ error: { code, message } }, { status, headers });
-const FEED_FUEL = { E10: "E10", B7: "B7_STANDARD" } as const;
 
 export const DEFAULT_DAYS = 7;
 export const MAX_DAYS = 30;
 
 /**
- * GET /v1/stations/{id}/history?fuelType=E10|B7&days=7. Recorded price changes for one station and grade,
+ * GET /v1/stations/{id}/history?fuelType=E10|E5|B7|B7_PREMIUM&days=7. Recorded price changes for one station and grade,
  * with an honest account of how long and how completely Tank Bear has been watching. A trend is returned
  * only when the whole window was observed; otherwise `trend` is null and `coverage.reason` says why.
  */
 export async function historyResponse(url: URL, id: string, repo: FuelRepository, now: () => number = Date.now): Promise<Response> {
   if (!/^[0-9a-f]{64}$/.test(id)) return err(400, "INVALID_REQUEST", "Unknown station id format.");
   const fuel = url.searchParams.get("fuelType");
-  if (fuel !== "E10" && fuel !== "B7") return err(400, "INVALID_REQUEST", "fuelType must be E10 or B7.");
+  if (!isFuelType(fuel)) return err(400, "INVALID_REQUEST", "fuelType must be E10, E5, B7 or B7_PREMIUM.");
   const daysParam = url.searchParams.get("days");
   const days = daysParam === null ? DEFAULT_DAYS : /^\d{1,2}$/.test(daysParam) ? Number(daysParam) : NaN;
   if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) return err(400, "INVALID_REQUEST", `days must be 1 to ${MAX_DAYS}.`);

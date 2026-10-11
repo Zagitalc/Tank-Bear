@@ -1,3 +1,4 @@
+import { isFuelType } from "./fuels.ts";
 import {
   add, CalculationInputError, compare, decimal, decimalText, divide,
   multiply, nonNegative, pence, positive, subtract, ZERO,
@@ -141,8 +142,8 @@ export function rankFuelStops(input: EconomicsInput): EconomicsResult {
     throw new CalculationInputError("mode", "only along_journey and fuel_trip have routed economics");
   }
   validateCoordinates(input.origin, "origin");
-  if (input.fuelType !== "E10" && input.fuelType !== "B7") {
-    throw new CalculationInputError("fuelType", "must be E10 or standard diesel B7");
+  if (!isFuelType(input.fuelType)) {
+    throw new CalculationInputError("fuelType", "must be E10, E5, standard diesel B7 or B7_PREMIUM");
   }
   identifier(input.routingContextId, "routingContextId");
   const mpg = positive(input.mpgImperial, "mpgImperial");

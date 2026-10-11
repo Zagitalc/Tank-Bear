@@ -24,10 +24,43 @@ Build, 19 JVM unit tests and lint passed. This update has not yet been installed
 or visually checked on the phone; no ADB device was connected at verification.
 Existing live phone tests describe the earlier deployed app, not this new UI.
 
-Next map/list stage:
+Combined map/list stage prepared locally:
 
-- Combine map and a scrollable station list/bottom sheet, with selection synchronized
-  both ways. Include Nearby results, prices, filters and sorting.
+- The Map tab now shares its space with a draggable, scrollable results panel;
+  More results/More map buttons provide an alternative to dragging. The map is
+  resized above the panel so its attribution remains visible.
+- Pump taps select and scroll to the matching card. Card taps select the pump
+  and fit the route. Nearby stations are included, with fill costs explicitly
+  excluding driving and straight-line distances labelled as such.
+- Persistent sorting controls offer backend-ranked best total, numeric pump
+  price and least driving time for routes; Nearby offers closest/cheapest.
+  Open now filters both map and list, excluding unknown opening states (and
+  temporary closures in Nearby). Backend ranks and costs are preserved.
+- Result cards retain price-update age, opening status, history and cost
+  explanations. Search entry and the existing list remain available on Find.
+- Android build, 20 JVM tests and lint passed; a phone visual/interaction check
+  is pending because no ADB device is connected. This stage is not installed,
+  committed or deployed. One-way routing and car lookup remain future work.
+
+Location-selection usability stage prepared locally:
+
+- Find offers Choose start/destination on map and Use my location. Raw coordinates
+  are behind an optional section. The map picker uses a centre marker and an
+  explicit Use this location confirmation, with Cancel leaving inputs unchanged.
+- Search stays fixed above navigation on Find and Map. Input changes show Update
+  results; previous routes and prices are hidden until refreshed, including when
+  inputs change while a request is in flight. Search identity stays in memory.
+- Map pump and start-car symbols are enlarged by 20%.
+- Place-name/postcode search still needs a chosen geocoding provider. E5/premium
+  diesel remain the next fuel-grade stage, not options in this UI update.
+- Build, 21 JVM tests and lint passed. Updated instrumentation tests compile but
+  could not run because the phone is disconnected. Installation/visual checks
+  for this usability update are pending; no commit or push has been made.
+
+Remaining map/list work:
+
+- Validate the combined view on a phone, including dragging, pump/card selection,
+  filters, sorting, large text and landscape.
 - Show price markers and a selected station detail with fill cost, driving fuel,
   total cost, opening status, price age and feed health kept distinct.
 - Add explicit one-way and return-trip options for a dedicated fuel trip.
@@ -69,7 +102,8 @@ Implementation gates:
   results must not silently become petrol or diesel. Hybrid/PHEV records require
   an explicit supported consumption policy; do not use blended electric MPG.
 - Fuel type alone does not establish E10 compatibility. Confirm supported grade;
-  Tank Bear currently offers E10 and standard diesel B7, not E5/premium grades.
+  Tank Bear currently offers E10 and standard diesel B7; E5 and premium diesel
+  are planned in the fuel-grade stage below.
 - Missing MPG offers manual entry, not an invented efficiency estimate. Distinguish
   unsupported fuel from lookup failure and missing data.
 - Send registration only for the user's requested lookup, avoid registration logs,
@@ -77,7 +111,42 @@ Implementation gates:
 - Test recognised petrol/diesel, unsupported propulsion, missing MPG, ambiguous
   derivative, bad registration, service failure and user overrides.
 
-## 3. Reliability and accuracy before public release
+## 3. E5 petrol and premium diesel
+
+E5 petrol and premium diesel are now implemented locally alongside E10 petrol
+and standard diesel. The live server and installed APK have not been updated
+for this stage yet.
+
+- The shared API grade mapping preserves B7 as standard diesel and adds E5 and
+  B7_PREMIUM. Feed codes are verified in `fuel-finder-contract.md`; ingestion
+  already retains these grades and the database keys prices/history by grade.
+- Android's Car selector exposes all four choices. Saved preferences and request
+  serialization use distinct codes, with no automatic change to MPG.
+- Nearby, history, routed selection and economics use the requested grade only.
+  Missing prices stay missing; no standard/premium substitution is permitted.
+- Backend typecheck, 185 tests and build passed; Android build, lint and 22 JVM
+  tests passed. Tests cover numeric costs, separate history, missing-grade
+  handling, all four API choices and preserved standard-diesel mapping.
+- Deploy the backward-compatible backend before installing/sharing this APK.
+  Verify live searches/history for both added grades after deployment. No schema
+  migration or graph rebuild is required. No deployment, commit or push was made
+  for this stage.
+
+Acceptance requirements:
+
+- Verify the official Fuel Finder grade identifiers and available price data
+  before extending ingestion, API contracts and Android fuel selection. Preserve
+  the source's grade distinctions rather than inferring them from station branding.
+- Use the selected grade consistently for station availability, map/list prices,
+  fill and routed driving costs, rankings and price history. Never substitute a
+  standard-grade price when the requested grade is missing.
+- Keep vehicle fuel type and chosen grade separate in registration lookup and
+  manual setup; do not infer grade compatibility from petrol/diesel alone.
+- Keep MPG editable and do not assume an efficiency improvement for premium fuel.
+- Test all four choices, missing grade prices, grade-specific history and
+  recalculation when the user changes grade.
+
+## 4. Reliability and accuracy before public release
 
 Continue the 15-minute refreshes; seven complete days of collection are required
 for meaningful week-long history. Validate continuity rather than relying only on
@@ -85,7 +154,7 @@ the date. Add stale-feed alerting, off-VM backups and a restore rehearsal. Verif
 proxy error logs do not retain coordinates or keys. Test concurrent routing load,
 forecourt access, divided roads and snapping; Great Britain excludes Northern Ireland.
 
-## 4. Android release
+## 5. Android release
 
 Remove server/key setup from normal onboarding; choose production access control
 and abuse limits. Decide tile-provider capacity, finish accessibility, offline/error
@@ -95,3 +164,43 @@ background location are part of this roadmap.
 
 See [release readiness](release-readiness.md) for detailed release gates. These
 stages should be reviewed separately; this map patch changes no running server.
+
+## 11 October mode-switch / legacy-server regression
+
+The user installed the four-grade APK before the backend deployment. A read-only
+check of the live server confirmed its request validator still accepts E10/B7
+only, explaining E5 rejection in Fuel Trip as well as Along Journey. Deployment
+approval is pending; do not describe E5 as live yet.
+
+Android now clears previous searches and validation errors on mode changes,
+resets map selection mode, and propagates coroutine cancellation. Known old-server
+grade rejections have a specific server-update message rather than blaming valid
+coordinates/MPG. Generic validation failures no longer direct users to alter valid
+car details. Build/lint and 23 JVM tests passed; the APK was installed on the phone.
+The initial device test passed state assertions but could not inspect a Compose
+hierarchy for visual assertions; screen-level verification remains outstanding.
+The isolated device state-recovery regression subsequently passed (1 test).
+
+## E5 / premium diesel deployment — 11 October 2026
+
+Deployed after explicit user approval. Saved pre-update code at
+`/var/tmp/tankbear-before-fuel-grades.tgz` on the VM, copied the tested backend,
+and restarted `tankbear-api`. API and refresh timer remain active. The immediate
+startup probe preceded the listener becoming ready; subsequent HTTPS status was
+200/ok and every functional check below passed.
+
+Public Reading/Oxford samples (not user journeys), over authenticated HTTPS:
+
+| Grade | Fuel Trip candidates / ms | Along Journey candidates / ms | Nearby priced |
+| --- | --- | --- | --- |
+| E5 | 12 / 304 | 11 / 448 | 20 |
+| Premium diesel | 12 / 152 | 12 / 280 | 15 |
+| E10 | 12 / 117 | not repeated | 20 |
+| Standard diesel | 12 / 77 | not repeated | 20 |
+
+All four grade-specific history calls returned 200 and one recorded price point;
+this is not a week-long trend. Nearby fill objects matched the requested feed
+grade. An unauthenticated request returned 401. These are single warm-service
+checks, not concurrency or cold-start benchmarks. The database, graph, secrets
+and timer configuration were not replaced. Earlier notes that deployment was
+pending are historical and superseded by this record. Code remains uncommitted.

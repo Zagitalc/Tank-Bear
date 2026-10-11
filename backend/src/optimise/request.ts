@@ -1,3 +1,4 @@
+import { isFuelType } from "../domain/fuels.ts";
 import type { Coordinates, FuelType } from "../domain/types.ts";
 
 export interface OptimiseRequest {
@@ -45,7 +46,7 @@ export function parseOptimiseRequest(body: unknown): { ok: true; value: Optimise
   } else if (body.destination !== undefined) {
     return fail("fuel_trip returns to the origin and takes no destination.");
   }
-  if (body.fuelType !== "E10" && body.fuelType !== "B7") return fail('fuelType must be "E10" or "B7" (standard diesel).');
+  if (!isFuelType(body.fuelType)) return fail('fuelType must be E10, E5, B7 (standard diesel) or B7_PREMIUM.');
   if (!obj(body.vehicle)) return fail("vehicle.mpgImperial is required.");
   const mpg = decimalIn(body.vehicle.mpgImperial, "vehicle.mpgImperial", 5, 200);
   if (Array.isArray(mpg)) return fail(mpg[0]!);
