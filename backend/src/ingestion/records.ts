@@ -1,5 +1,5 @@
 import type { FuelType } from "../domain/types.ts";
-import type { DayHours, WeekHours } from "../opening/status.ts";
+import { divisionFor, type DayHours, type StationHours } from "../opening/status.ts";
 
 /** Feed fuel codes observed on 5 October 2026. Unknown codes are quarantined. */
 export const FEED_FUEL_TYPES = ["E10", "E5", "B7_STANDARD", "B7_PREMIUM", "HVO", "B10"] as const;
@@ -23,8 +23,8 @@ export interface Station {
   permanentClosure: boolean;
   isMotorway: boolean;
   isSupermarket: boolean;
-  /** Usual weekly hours, or null if absent or unreadable (never a reason to quarantine a station). */
-  openingHours: WeekHours | null;
+  /** Weekly and bank-holiday hours, or null if absent or unreadable (never a reason to quarantine a station). */
+  openingHours: StationHours | null;
 }
 
 export interface FuelPrice {
@@ -76,17 +76,25 @@ function optionalString(v: unknown): string | null {
 
 const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 
-function readHours(raw: unknown): WeekHours | null {
-  const days = (raw as { usual_days?: Record<string, unknown> } | null)?.usual_days;
+const TIME = /^\d{2}:\d{2}(?::\d{2})?$/;
+
+function readHours(raw: unknown, location: Obj): StationHours | null {
+  const times = raw as { usual_days?: Record<string, unknown>; bank_holiday?: Record<string, unknown> } | null;
+  const days = times?.usual_days;
   if (!isObj(days)) return null;
   const week: DayHours[] = [];
   for (const key of DAY_KEYS) {
     const d = days[key];
-    if (!isObj(d) || typeof d.open !== "string" || typeof d.close !== "string") return null;
-    if (!/^\d{2}:\d{2}(?::\d{2})?$/.test(d.open) || !/^\d{2}:\d{2}(?::\d{2})?$/.test(d.close)) return null;
+    if (!isObj(d) || typeof d.open !== "string" || typeof d.close !== "string" || !TIME.test(d.open) || !TIME.test(d.close)) return null;
     week.push({ open: d.open.slice(0, 5), close: d.close.slice(0, 5), is24Hours: d.is_24_hours === true });
   }
-  return week;
+  // Bank-holiday hours override usual hours only when the feed marks them as such; "standard" means usual hours apply.
+  const bh = times?.bank_holiday;
+  const bankHoliday = isObj(bh) && bh.type === "bank holiday" && typeof bh.open_time === "string" && typeof bh.close_time === "string"
+    && TIME.test(bh.open_time) && TIME.test(bh.close_time)
+    ? { open: bh.open_time.slice(0, 5), close: bh.close_time.slice(0, 5), is24Hours: bh.is_24_hours === true }
+    : null;
+  return { week, bankHoliday, division: divisionFor(location.country, location.postcode) };
 }
 
 function normaliseStation(raw: unknown): Station | string {
@@ -111,7 +119,7 @@ function normaliseStation(raw: unknown): Station | string {
     permanentClosure: flag(raw.permanent_closure),
     isMotorway: flag(raw.is_motorway_service_station),
     isSupermarket: flag(raw.is_supermarket_service_station),
-    openingHours: readHours(raw.opening_times),
+    openingHours: readHours(raw.opening_times, loc),
   };
 }
 

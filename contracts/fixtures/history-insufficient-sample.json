@@ -39,5 +39,6 @@
   "startKnown": true,
   "currentPencePerLitre": "136.9",
   "trend": null,
+  "attribution": "Fuel Finder/ICS",
   "note": "Each point is the price from the provider's own change time until the next point. Changes made between refreshes are dated by the provider."
 }

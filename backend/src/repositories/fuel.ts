@@ -1,7 +1,7 @@
 import type { CurrentState, RefreshDiff, StoredPrice } from "../ingestion/diff.ts";
 import { priceKey } from "../ingestion/diff.ts";
 import type { Station } from "../ingestion/records.ts";
-import { parseWeek, serialiseWeek } from "../opening/status.ts";
+import { parseHours, serialiseHours } from "../opening/status.ts";
 
 export const FEED = "fuel-finder-national";
 const CHUNK = 50; // statements per D1 batch
@@ -91,8 +91,12 @@ export function createFuelRepository(db: D1Database): FuelRepository {
     },
     async loadCurrent() {
       const stations = new Map<string, Station>();
+      const delisted = new Set<string>();
       const rows = await db.prepare("SELECT * FROM stations").all<Record<string, unknown>>();
-      for (const r of rows.results) stations.set(String(r.node_id), rowToStation(r));
+      for (const r of rows.results) {
+        stations.set(String(r.node_id), rowToStation(r));
+        if (r.delisted_at) delisted.add(String(r.node_id));
+      }
       const prices = new Map<string, StoredPrice>();
       const pr = await db.prepare("SELECT * FROM current_prices").all<Record<string, string>>();
       for (const r of pr.results) {
@@ -101,7 +105,7 @@ export function createFuelRepository(db: D1Database): FuelRepository {
           priceLastUpdated: r.price_last_updated!, priceChangeEffective: r.price_change_effective!,
         });
       }
-      return { stations, prices };
+      return { stations, prices, delisted };
     },
     async previousCounts() {
       const r = await db.prepare("SELECT station_count, priced_station_count FROM ingestion_state WHERE feed = ?1 AND last_success_at IS NOT NULL")
@@ -116,10 +120,10 @@ export function createFuelRepository(db: D1Database): FuelRepository {
              permanent_closure, is_motorway, is_supermarket, first_seen_at, updated_at, opening_hours)
            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?11,?12)
            ON CONFLICT(node_id) DO UPDATE SET trading_name=?2, brand_name=?3, postcode=?4, latitude=?5, longitude=?6,
-             temporary_closure=?7, permanent_closure=?8, is_motorway=?9, is_supermarket=?10, updated_at=?11, opening_hours=?12`,
+             temporary_closure=?7, permanent_closure=?8, is_motorway=?9, is_supermarket=?10, updated_at=?11, opening_hours=?12, delisted_at=NULL`,
         ).bind(s.nodeId, s.tradingName, s.brandName, s.postcode, s.latitude, s.longitude, flag(s.temporaryClosure),
           flag(s.permanentClosure), flag(s.isMotorway), flag(s.isSupermarket), observedAt,
-          s.openingHours ? serialiseWeek(s.openingHours) : null));
+          s.openingHours ? serialiseHours(s.openingHours) : null));
       }
       for (const { nodeId, price: p } of diff.priceChanges) {
         st.push(db.prepare(
@@ -133,6 +137,9 @@ export function createFuelRepository(db: D1Database): FuelRepository {
            VALUES (?1,?2,?3,?4,?5,?6)
            ON CONFLICT(node_id, feed_fuel_type) DO UPDATE SET pence_per_litre=?3, price_last_updated=?4, price_change_effective=?5, observed_at=?6`,
         ).bind(nodeId, p.feedFuelType, p.pencePerLitre, p.priceLastUpdated, p.priceChangeEffective, observedAt));
+      }
+      for (const id of diff.delist) {
+        st.push(db.prepare("UPDATE stations SET delisted_at = ?1 WHERE node_id = ?2 AND delisted_at IS NULL").bind(observedAt, id));
       }
       for (const r of diff.priceRemovals) {
         st.push(db.prepare("DELETE FROM current_prices WHERE node_id = ?1 AND feed_fuel_type = ?2").bind(r.nodeId, r.feedFuelType));
@@ -152,7 +159,7 @@ export function createFuelRepository(db: D1Database): FuelRepository {
       const dLat = radiusMetres / 111_320;
       const dLon = radiusMetres / (111_320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
       const rows = await db.prepare(
-        `SELECT * FROM stations WHERE permanent_closure = 0 AND latitude BETWEEN ?1 AND ?2 AND longitude BETWEEN ?3 AND ?4`,
+        `SELECT * FROM stations WHERE permanent_closure = 0 AND delisted_at IS NULL AND latitude BETWEEN ?1 AND ?2 AND longitude BETWEEN ?3 AND ?4`,
       ).bind(lat - dLat, lat + dLat, lon - dLon, lon + dLon).all<Record<string, unknown>>();
       const hits = rows.results
         .map((r) => ({ station: rowToStation(r), distanceMetres: haversine(lat, lon, Number(r.latitude), Number(r.longitude)) }))
@@ -180,7 +187,7 @@ export function createFuelRepository(db: D1Database): FuelRepository {
         const rows = await db.prepare(
           `SELECT s.*, p.pence_per_litre, p.price_last_updated FROM stations s
              JOIN current_prices p ON p.node_id = s.node_id AND p.feed_fuel_type = ?1
-            WHERE s.permanent_closure = 0 AND s.temporary_closure = 0
+            WHERE s.permanent_closure = 0 AND s.temporary_closure = 0 AND s.delisted_at IS NULL
               AND s.latitude BETWEEN ?2 AND ?3 AND s.longitude BETWEEN ?4 AND ?5 LIMIT 3000`,
         ).bind(feedFuelType, b.minLat, b.maxLat, b.minLon, b.maxLon).all<Record<string, unknown>>();
         for (const r of rows.results) {
@@ -237,7 +244,7 @@ function rowToStation(r: Record<string, unknown>): Station {
 
 function readWeek(value: unknown) {
   if (typeof value !== "string") return null;
-  try { return parseWeek(JSON.parse(value)); } catch { return null; }
+  try { return parseHours(JSON.parse(value)); } catch { return null; }
 }
 
 export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {

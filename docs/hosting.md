@@ -54,5 +54,15 @@ Option **A**, as a staged plan with a cost fallback to **B** if Oracle refuses s
    accumulating history.
 5. Add a simple alert for refresh failures (a status check you can see; no third-party monitoring decided).
 
-Nothing in this plan has been created or deployed. Keep Fuel Finder credentials and `API_KEYS` out of Git and out of
+As of 11 October 2026 the London VM exists and SSH works (see [instance record](oracle-instance.md));
+application services remain undeployed. Keep Fuel Finder credentials and `API_KEYS` out of Git and out of
 shared logs, and review the provider's terms on hosting a cached copy (see `release-readiness.md`).
+
+
+## Update, 6 October 2026: decision and result of the Cloudflare test
+
+A throwaway Worker called Fuel Finder from Cloudflare. Over HTTP from London it worked at first; later (HTTP and scheduled runs,
+London and Seattle) it was refused with HTTP 429 "Too many failed attempts. Try again in 5 minutes.", while the same credentials
+worked from a home connection at the same moment. That is a lockout on shared Cloudflare addresses, which we cannot fix. So
+the refresh runs from a server with its own static UK address (Option A). The server kit is built: `server-deploy.md`.
+The throwaway Worker and its secrets were deleted.

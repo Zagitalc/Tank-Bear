@@ -1,0 +1,18 @@
+# Routing engine for Great Britain. First start downloads the OpenStreetMap extract (about 2 GB) and builds the graph;
+# that takes a while and needs several GB of RAM and disk. It listens on this machine only (127.0.0.1:8002).
+# Never publish this port: it has no authentication.
+services:
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - /var/lib/valhalla/custom_files:/custom_files
+    environment:
+      tile_urls: "https://download.geofabrik.de/europe/great-britain-latest.osm.pbf"
+      use_tiles_ignore_pbf: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "2"

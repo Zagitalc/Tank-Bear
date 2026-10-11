@@ -1,36 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { URL as NodeURL } from "node:url";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { openSqliteD1 } from "../server/sqlite-d1.ts";
 
-/** Minimal D1 surface over node:sqlite, running the real migration SQL. */
+/** In-memory D1 for tests: the real server adapter with every migration applied. */
 export function sqliteD1(): { db: D1Database; sql: DatabaseSync } {
-  const sql = new DatabaseSync(":memory:");
-  const dir = new NodeURL("../migrations/", import.meta.url);
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) sql.exec(readFileSync(new NodeURL(file, dir), "utf8"));
-  const prepare = (query: string) => {
-    let params: unknown[] = [];
-    const stmt: Record<string, unknown> = {
-      bind(...values: unknown[]) { params = values; return stmt; },
-      async run() {
-        const r = sql.prepare(query).run(...(params as never[]));
-        return { success: true, meta: { changes: Number(r.changes) } };
-      },
-      async all() { return { results: sql.prepare(query).all(...(params as never[])) }; },
-      async first() { return sql.prepare(query).get(...(params as never[])) ?? null; },
-    };
-    return stmt;
-  };
-  const db = {
-    prepare,
-    async batch(statements: Array<{ run(): Promise<unknown> }>) {
-      sql.exec("BEGIN");
-      try {
-        const out = [];
-        for (const s of statements) out.push(await s.run());
-        sql.exec("COMMIT");
-        return out;
-      } catch (e) { sql.exec("ROLLBACK"); throw e; }
-    },
-  } as unknown as D1Database;
+  const { db, sql } = openSqliteD1(":memory:");
   return { db, sql };
 }

@@ -18,6 +18,7 @@
   },
   "feed": {
     "source": "Fuel Finder",
+    "attribution": "Fuel Finder/ICS",
     "lastSuccessfulRefreshAt": "2026-10-05T11:50:00.000Z"
   },
   "baseline": {

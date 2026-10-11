@@ -3,10 +3,13 @@ import { fromThousandths, medianThousandths, toThousandths } from "../history/se
 import { openingStatus } from "../opening/status.ts";
 import type { FuelRepository, NearbyRow } from "../repositories/fuel.ts";
 
-export const MAX_RADIUS_METRES = 25_000;
+// Bounded so the API serves "what is near me", not a bulk copy of the feed (Fuel Finder forbids bulk export).
+export const MAX_RADIUS_METRES = 10_000;
 export const DEFAULT_RADIUS_METRES = 5_000;
-export const MAX_LIMIT = 50;
+export const MAX_LIMIT = 20;
 export const DEFAULT_LIMIT = 20;
+
+import { ATTRIBUTION } from "../domain/attribution.ts";
 
 const headers = { "Cache-Control": "no-store" };
 const bad = (message: string) => Response.json({ error: { code: "INVALID_REQUEST", message } }, { status: 400, headers });
@@ -100,7 +103,7 @@ export async function nearbyResponse(url: URL, repo: FuelRepository, now: () => 
     return Response.json(
       {
         // Feed health is separate from any price's own age.
-        feed: { source: "Fuel Finder", lastCheckedAt: status.lastAttemptAt, lastSuccessfulRefreshAt: status.lastSuccessAt, lastStatus: status.lastStatus },
+        feed: { source: "Fuel Finder", attribution: ATTRIBUTION, lastCheckedAt: status.lastAttemptAt, lastSuccessfulRefreshAt: status.lastSuccessAt, lastStatus: status.lastStatus },
         stations: shapeNearby(rows, new Date(now()), fuel),
         ...(fuel ? { localSummary: localSummary(rows, fuel.type) } : {}),
       },

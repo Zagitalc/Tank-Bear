@@ -1,3 +1,4 @@
+import { ATTRIBUTION } from "../domain/attribution.ts";
 import { CalculationInputError, rankFuelStops } from "../domain/economics.ts";
 import type { Coordinates, ObservedPrice } from "../domain/types.ts";
 import type { FuelRepository } from "../repositories/fuel.ts";
@@ -139,7 +140,7 @@ export async function optimiseJourney(deps: Deps, req: OptimiseRequest): Promise
         excludedByLimits: limitExcluded,
       },
       routing: { provider: routing.provider, graphVersion: routing.graphVersion },
-      feed: { source: "Fuel Finder", lastSuccessfulRefreshAt: feed.lastSuccessAt },
+      feed: { source: "Fuel Finder", attribution: ATTRIBUTION, lastSuccessfulRefreshAt: feed.lastSuccessAt },
       baseline: baseline ? { route: baseline.route, geometry: baseline.geometry } : null,
       reference: result.reference,
       labels: result.labels,

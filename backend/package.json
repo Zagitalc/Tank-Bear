@@ -10,6 +10,9 @@
     "test:runtime": "node --test tests/*.runtime.mjs",
     "demo:economics": "node scripts/economics-demo.ts",
     "smoke:routing": "node scripts/routing-smoke.ts",
+    "fixtures": "node scripts/generate-fixtures.ts",
+    "serve": "node server/main.ts",
+    "refresh": "node server/refresh.ts",
     "build": "esbuild src/index.ts src/domain/economics.ts --bundle --format=esm --platform=neutral --target=es2022 --outbase=src --outdir=dist"
   },
   "devDependencies": {

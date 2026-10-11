@@ -1,0 +1,20 @@
+[Unit]
+Description=Tank Bear Fuel Finder refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tankbear
+Group=tankbear
+EnvironmentFile=/etc/tankbear/tankbear.env
+ExecStart=/opt/node/bin/node /opt/tankbear/backend/server/refresh.ts
+Environment=NODE_NO_WARNINGS=1
+TimeoutStartSec=420
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/tankbear
+MemoryMax=1G

@@ -1,0 +1,10 @@
+# HTTPS in front of the API. TANKBEAR_HOST comes from /etc/caddy/tankbear.env (for example tankbear.duckdns.org).
+# Caddy gets and renews the certificate by itself; ports 80 and 443 must be reachable.
+# No access log is configured on purpose: request URLs hold coordinates and must not be written to disk.
+{$TANKBEAR_HOST} {
+	encode zstd gzip
+	header -Server
+	reverse_proxy 127.0.0.1:8787 {
+		header_up X-Real-IP {remote_host}
+	}
+}

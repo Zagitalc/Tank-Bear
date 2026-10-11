@@ -170,3 +170,35 @@ test("scheduled handler without credentials does nothing", async () => {
   const env = { DB: { prepare() { throw new Error("must not be called"); } } as unknown as D1Database };
   await (worker as any).scheduled({}, env);
 });
+
+test("stations missing from a complete refresh are delisted, hidden from nearby, kept in history, and restored if they return", async () => {
+  const { db, sql } = sqliteD1();
+  const repo = createFuelRepository(db);
+  const c = clock();
+  await runRefresh(client(world()), repo, c.now);
+  c.advance(60_000);
+  const first = await runRefresh(client(world(N - 20)), repo, c.now);
+  assert.equal(first.status === "complete" && first.delisted, 20);
+  const gone = id(N - 1);
+  assert.ok((sql.prepare("SELECT delisted_at FROM stations WHERE node_id=?").get(gone) as { delisted_at: string | null }).delisted_at);
+  assert.equal(count(sql, "stations"), N); // Never deleted.
+  assert.ok(count(sql, "price_changes") >= N * 2); // History kept.
+  const near = await repo.nearby({ lat: 51.45 + (N - 1) * 0.001, lon: -0.97, radiusMetres: 100, limit: 5 });
+  assert.equal(near.some((r) => r.station.nodeId === gone), false);
+  c.advance(60_000);
+  const again = await runRefresh(client(world(N - 20)), repo, c.now);
+  assert.equal(again.status === "complete" && again.delisted, 0); // Already delisted: no repeated writes.
+  c.advance(60_000);
+  await runRefresh(client(world()), repo, c.now);
+  assert.equal((sql.prepare("SELECT delisted_at FROM stations WHERE node_id=?").get(gone) as { delisted_at: string | null }).delisted_at, null);
+});
+
+test("a failed or rejected refresh never delists anything", async () => {
+  const { db, sql } = sqliteD1();
+  const c = clock();
+  await runRefresh(client(world()), createFuelRepository(db), c.now);
+  c.advance(60_000);
+  await runRefresh(client(world(300)), createFuelRepository(db), c.now); // rejected: too small
+  await runRefresh(client(world(), { failPriceBatch: 2 }), createFuelRepository(db), c.now); // failed
+  assert.equal(Number((sql.prepare("SELECT COUNT(*) AS n FROM stations WHERE delisted_at IS NOT NULL").get() as { n: number }).n), 0);
+});

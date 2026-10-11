@@ -1,10 +1,19 @@
 # Release readiness
 
-Status at 5 October 2026: Stages 0 to 8 are built and run locally. Nothing is deployed, published or shared.
+Status at 11 October 2026: Stages 0 to 8 are built and run locally. The London VM exists with a reserved
+public IP and verified SSH; the application is not deployed or released. See `oracle-instance.md`.
 This lists what must be decided or done before anyone other than the developer uses Tank Bear. "Blocker" means do
 not release without it. Items marked "check" need a person's decision or an external answer, not code.
 
-## 1. Data rights (blocker)
+## 1. Data rights
+
+Answered by the Fuel Finder Service Team on 6 October 2026 (see `fuel-finder-contract.md`): caching, in-service trends and
+history retention are allowed; no raw redistribution or bulk export; "Fuel Finder/ICS" must be credited in the app (done).
+Remaining: confirm the exact attribution wording against the onboarding terms, keep the Nearby caps in place, and test
+production egress (WAF may restrict non-residential IPs; a static UK IP can be allowlisted on request).
+
+Earlier notes, kept for history:
+
 
 - **Check:** may Tank Bear cache Fuel Finder data server-side, keep price-change history, and show individual prices next
   to derived journey savings in clients? The guidelines recommend caching and say "don't redistribute raw API data";
@@ -13,20 +22,21 @@ not release without it. Items marked "check" need a person's decision or an exte
 - **Check:** attribution wording and any retention limits.
 - The app and API never offer a raw feed or export. `/v1/stations/nearby` returns at most 50 stations per call behind an
   app key and rate limits; keep it that way. Review whether even that is acceptable once the terms are known.
-- **Check:** Cloudflare Workers egress is accepted by the provider (a Worker's fetch needed an explicit User-Agent; the
-  production network has not been tried).
+- Cloudflare Workers egress was tested on 6 October 2026 and is **not reliable** (shared addresses get locked out); ingestion
+  runs from a server with a static UK IP instead (`server-deploy.md`). Whether that address needs an allowlist is untested.
 
 ## 2. Hosting and operations (blocker)
 
-- Deploy the Worker and a real D1 database (none exists: `wrangler.jsonc` has a placeholder id). Apply migrations 0001 to 0004.
-- Run the 15-minute refresh in production and watch it: a full refresh is about 36 paced requests and 30 seconds; Worker
-  CPU and wall-time limits for it are untested. Alert when `last_success_at` is older than the 6-hour gate.
-- Routing: Valhalla runs only in a local Docker container (shared with another project). Choose a host, build a Great
-  Britain graph (Northern Ireland is not covered), set an update policy, and measure latency and cost. Journey search
-  cost per request is 1 baseline plus up to 12 routes.
-- Secrets in Cloudflare (`wrangler secret put`), not files: Fuel Finder credentials, `API_KEYS`, `ROUTING_BASE_URL`.
-- Logging: check no coordinates, keys or bodies are logged anywhere in the production path.
-- Backups and migrations plan for D1; price history is not reconstructable.
+- Deploy the Node API and SQLite database on the existing Oracle VM using `server-deploy.md`.
+  Startup applies the repository's SQL migrations (currently 0001 to 0005).
+- Prove one full refresh from the reserved UK IP before enabling the 15-minute timer; provider allowlisting remains untested.
+  Alert when `last_success_at` is older than the 6-hour gate.
+- Routing: select an Arm64 Valhalla image digest, build a Great Britain graph on the same VM (Northern Ireland is not
+  covered), set an update policy, and measure latency and cost. Each journey search needs one baseline and up to 12 routes.
+- Credentials and `API_KEYS` belong in the restricted `/etc/tankbear/tankbear.env` file; Caddy receives a separate
+  hostname-only environment file. The routing engine binds only to localhost.
+- Verify that no coordinates, keys or bodies are logged anywhere in the production path, including proxy errors.
+- Verify SQLite backups and restores, and keep copies off the VM; price history is not reconstructable.
 
 ## 3. Access control and abuse (blocker)
 
@@ -74,7 +84,7 @@ with history and opening hours; saved places as chips; clearer empty, loading an
 
 ## 8. Quality gates before release
 
-- Backend: `npm run check` green (152 tests). Add a deployed-environment smoke test.
+- Backend: `npm run check` green (177 tests; see [server verification](server-verification.md)). Add a deployed-environment smoke test.
 - Android: unit tests, lint, five instrumentation tests green on a healthy emulator and one real device.
 - A real-device run on mobile data, including permission denial and approximate location.
 - Re-read `AGENTS.md`: no commit, push, PR, deployment or release without the owner's explicit instruction for that action.

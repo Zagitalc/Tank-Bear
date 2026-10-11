@@ -1,3 +1,4 @@
+import { ATTRIBUTION } from "../domain/attribution.ts";
 import { assessCoverage, buildHistory } from "../history/series.ts";
 import type { FuelRepository } from "../repositories/fuel.ts";
 
@@ -38,6 +39,7 @@ export async function historyResponse(url: URL, id: string, repo: FuelRepository
       window: { days, from: from.toISOString(), to: at.toISOString() },
       current,
       ...result,
+      attribution: ATTRIBUTION,
       note: "Each point is the price from the provider's own change time until the next point. Changes made between refreshes are dated by the provider.",
     }, { headers });
   } catch {

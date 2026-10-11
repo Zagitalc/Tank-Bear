@@ -13,6 +13,8 @@ export interface StoredPrice {
 
 export interface CurrentState {
   stations: ReadonlyMap<string, Station>;
+  /** Stations currently marked delisted. */
+  delisted?: ReadonlySet<string>;
   prices: ReadonlyMap<string, StoredPrice>; // key: nodeId|feedFuelType
 }
 
@@ -25,6 +27,8 @@ export interface PriceWrite {
 
 export interface RefreshDiff {
   stationUpserts: Station[];
+  /** Listed stations missing from this complete refresh: marked delisted, never deleted. */
+  delist: string[];
   priceUpserts: PriceWrite[];
   /** Observed changes to append to history (includes first observations). */
   priceChanges: PriceWrite[];
@@ -43,14 +47,19 @@ const sameStation = (a: Station, b: Station) =>
 /**
  * Compares a complete, validated refresh with stored state and returns only the rows that
  * changed, so a 15-minute poll of an unchanged feed writes nothing but refresh health.
- * Stations missing from the feed are untouched here; they are never deleted.
+ * Stations missing from the feed are marked delisted (only ever called for a complete refresh); never deleted.
  */
 export function diffRefresh(current: CurrentState, stations: readonly Station[], prices: readonly StationPrices[]): RefreshDiff {
-  const diff: RefreshDiff = { stationUpserts: [], priceUpserts: [], priceChanges: [], priceRemovals: [], skippedOutOfOrder: 0, unchangedPrices: 0 };
+  const diff: RefreshDiff = { stationUpserts: [], delist: [], priceUpserts: [], priceChanges: [], priceRemovals: [], skippedOutOfOrder: 0, unchangedPrices: 0 };
 
   for (const station of stations) {
     const stored = current.stations.get(station.nodeId);
-    if (!stored || !sameStation(stored, station)) diff.stationUpserts.push(station);
+    // A delisted station that reappears is rewritten so its delisting clears.
+    if (!stored || !sameStation(stored, station) || current.delisted?.has(station.nodeId)) diff.stationUpserts.push(station);
+  }
+  const listed = new Set(stations.map((s) => s.nodeId));
+  for (const id of current.stations.keys()) {
+    if (!listed.has(id) && !current.delisted?.has(id)) diff.delist.push(id);
   }
 
   const knownStations = new Set([...current.stations.keys(), ...stations.map((s) => s.nodeId)]);

@@ -69,7 +69,7 @@ const ID = "ab".repeat(32);
 
 function seed(opts: { watchedDays: number; missEvery?: number }) {
   const { db, sql } = sqliteD1();
-  sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,0,0,0,0,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',NULL)`).run(ID, "History Garage", "B", "RG1", 51.45, -0.97);
+  sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,0,0,0,0,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',NULL,NULL)`).run(ID, "History Garage", "B", "RG1", 51.45, -0.97);
   sql.prepare(`INSERT INTO current_prices VALUES (?,?,?,?,?,?)`).run(ID, "E10", "136.9", day(1), day(1), day(1));
   const change = sql.prepare(`INSERT INTO price_changes (node_id, feed_fuel_type, pence_per_litre, price_last_updated, price_change_effective, observed_at) VALUES (?,?,?,?,?,?)`);
   change.run(ID, "E10", "140.9", day(10), day(10), day(9));
@@ -170,7 +170,7 @@ test("nearby gives a local median and each station's difference from it, ignorin
   const { db, sql } = sqliteD1();
   sql.exec(`INSERT INTO ingestion_state (feed, last_success_at, last_status) VALUES ('fuel-finder-national', '2026-10-12T11:50:00.000Z', 'complete')`);
   const add = (id: string, lat: number, pence: string | null, temp = 0) => {
-    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,0,0,0,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',NULL)`).run(id, id, "B", "RG1", lat, -0.97, temp);
+    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,0,0,0,'2026-10-01T00:00:00Z','2026-10-01T00:00:00Z',NULL,NULL)`).run(id, id, "B", "RG1", lat, -0.97, temp);
     if (pence) sql.prepare(`INSERT INTO current_prices VALUES (?,?,?,?,?,?)`).run(id, "E10", pence, day(1), day(1), day(1));
   };
   add("a", 51.450, "130.9"); add("b", 51.451, "140.9"); add("c", 51.452, "150.9"); add("d", 51.453, "90.0", 1); add("e", 51.454, null);
@@ -180,4 +180,12 @@ test("nearby gives a local median and each station's difference from it, ignorin
   const by = Object.fromEntries(body.stations.map((s: any) => [s.id, s.fill?.vsLocalMedianPencePerLitre]));
   assert.deepEqual([by.a, by.b, by.c], ["-10", "0", "10"]);
   assert.equal(by.e, undefined);
+});
+
+test("every response carrying prices names Fuel Finder/ICS, as the provider requires", async () => {
+  const { db } = seed({ watchedDays: 8 });
+  const history = (await (await get(db, `/v1/stations/${ID}/history?fuelType=E10`)).json()) as any;
+  assert.equal(history.attribution, "Fuel Finder/ICS");
+  const nearby = (await (await get(db, "/v1/stations/nearby?lat=51.45&lon=-0.97")).json()) as any;
+  assert.equal(nearby.feed.attribution, "Fuel Finder/ICS");
 });

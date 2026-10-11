@@ -24,7 +24,7 @@ function seed(opts: { lastSuccess?: string | null } = {}) {
   let n = 0;
   const add = (name: string, at: Coordinates, pence: string, o: { fuel?: string; temp?: boolean; perm?: boolean; hours?: string } = {}) => {
     const id = `st${++n}-${name}`;
-    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, name, "Brand", "RG1", at.lat, at.lon, o.temp ? 1 : 0, o.perm ? 1 : 0, 0, 0, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", o.hours ?? null);
+    sql.prepare(`INSERT INTO stations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`).run(id, name, "Brand", "RG1", at.lat, at.lon, o.temp ? 1 : 0, o.perm ? 1 : 0, 0, 0, "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z", o.hours ?? null);
     sql.prepare(`INSERT INTO current_prices VALUES (?,?,?,?,?,?)`).run(id, o.fuel ?? "E10", pence, "2026-10-05T08:00:00.000Z", "2026-10-05T08:00:00.000Z", "2026-10-05T08:00:00.000Z");
     return id;
   };
@@ -86,6 +86,7 @@ test("a cheaper station slightly off the route can beat a dearer one on it, with
   assert.equal(body.candidates[0].priceSource.feedLastCheckedAt, "2026-10-05T11:50:00.000Z");
   assert.ok(body.candidates[0].routeGeometry.length > 0);
   assert.equal(body.routing.graphVersion, "v1");
+  assert.equal(body.feed.attribution, "Fuel Finder/ICS");
 });
 
 test("limits drop stations whose routed detour is too large, and say so", async () => {

@@ -20,6 +20,8 @@ export interface ClientDeps {
   sleep: (ms: number) => Promise<void>;
   now: () => number;
   baseUrl?: string;
+  /** Test hook: spacing between requests. Production uses MIN_REQUEST_GAP_MS. */
+  minGapMs?: number;
 }
 
 export class FuelFinderAuthError extends Error {
@@ -38,7 +40,7 @@ export function createFuelFinderClient(credentials: FuelFinderCredentials, deps:
   let lastRequestAt = Number.NEGATIVE_INFINITY;
 
   async function paced(url: string, init: RequestInit): Promise<Response> {
-    const wait = lastRequestAt + MIN_REQUEST_GAP_MS - deps.now();
+    const wait = lastRequestAt + (deps.minGapMs ?? MIN_REQUEST_GAP_MS) - deps.now();
     if (wait > 0) await deps.sleep(wait);
     lastRequestAt = deps.now();
     return deps.fetch(url, init);
