@@ -1,12 +1,12 @@
 # Running Tank Bear on your own server (runbook)
 
-**Infrastructure update, 11 October 2026:** the London VM now exists at reserved IP
-`145.241.223.194` and SSH works. Only inbound TCP 22 is allowed; HTTPS, routing,
-the API and refresh jobs have not been installed. See [instance record](oracle-instance.md).
-
-**Status, 6 October 2026:** everything in `backend/server/` and `deploy/oracle/` is built and tested on a Mac. The
-install script, systemd units, Caddy and Docker steps have **never been run on a real server**: treat the first run as a
-rehearsal, read each step, and tell me what differs. No application services have been deployed.
+**Deployment update, 11 October 2026:** the API and Caddy are installed and running
+on `145.241.223.194`. [Public status](https://tankbear.duckdns.org/status) returns
+HTTP 200 over verified HTTPS; HTTP redirects to HTTPS and protected API routes
+reject missing keys. Oracle and host firewalls allow TCP 22, 80 and 443.
+The first Fuel Finder refresh completed at 12:12 UTC (13:12 BST), loading 8,131
+stations, 8,127 with prices. Status reports `ok`. The 15-minute refresh and daily
+backup timers are enabled; routing has not been deployed.
 
 See [server verification](server-verification.md) for the 11 October local test results and remaining limits.
 
@@ -126,12 +126,10 @@ for development; see `release-readiness.md` for the release plan.)
 
 ## What I could not test (watch for these)
 
-- Oracle's Ubuntu image firewall rules and the `iptables` lines in `install.sh`.
-- The systemd hardening options (a unit may fail to start if one is too strict: `journalctl -u tankbear-api` says which).
-- Ubuntu's packaged Caddy and Docker versions, and Caddy getting a certificate for a DuckDNS name.
+- Full restore rehearsal, off-machine backups, and Docker routing operation.
 - Valhalla's memory use building Great Britain on 12 GB, and its route quality for the whole UK (only Reading to Oxford was checked).
 - Node's built-in SQLite under load from the app plus the refresh at once (WAL mode and a 10 second lock wait are set).
-- Whether Fuel Finder accepts this address without an allowlist.
+- Long-term refresh reliability (the first live refresh succeeded without an allowlist change).
 
 ## Security notes
 
