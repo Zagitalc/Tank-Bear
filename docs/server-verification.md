@@ -69,7 +69,7 @@ not validate road routes, route quality or production latency.
 ## Limits and next stage
 
 History collection has started; week-long trends require a full week of continuous
-refreshes. Scheduled-run success still needs observation. Off-machine backup and
+refreshes. Scheduled refreshes at 12:15, 12:30 and 12:45 UTC succeeded, including during the graph build. Off-machine backup and
 restore rehearsal, concurrent production load and proxy error-log redaction remain
-unverified. The Valhalla image needs a tested Arm64 digest, followed by the Great
-Britain graph build and real journey measurements. Routing is the next review stage.
+unverified. Valhalla is now pinned, deployed and measured; see
+[routing deployment](routing-deployment.md) for build memory, latency, restart and phone checks.

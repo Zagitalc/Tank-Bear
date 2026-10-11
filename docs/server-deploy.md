@@ -6,7 +6,9 @@ HTTP 200 over verified HTTPS; HTTP redirects to HTTPS and protected API routes
 reject missing keys. Oracle and host firewalls allow TCP 22, 80 and 443.
 The first Fuel Finder refresh completed at 12:12 UTC (13:12 BST), loading 8,131
 stations, 8,127 with prices. Status reports `ok`. The 15-minute refresh and daily
-backup timers are enabled; routing has not been deployed.
+backup timers are enabled. Valhalla 3.9.1 now serves the Great Britain graph privately;
+measured full journey searches took 0.43–1.62 seconds on the VM. See
+[routing deployment](routing-deployment.md).
 
 See [server verification](server-verification.md) for the 11 October local test results and remaining limits.
 
@@ -87,8 +89,13 @@ No allowlist request is sent automatically.
 
 ## 5. Start routing after the refresh stage is reviewed
 
-Before deployment, select and record a tested Valhalla image digest in the Compose file; its current `latest`
-reference is provisional. Verify that the selected image supports Arm64.
+The Compose file pins official Valhalla 3.9.1 to its verified Arm64 manifest digest.
+The service has a 9 GiB memory limit and 1.5 CPU limit;
+this reserves resources for the API and refresh. For a new initial build, temporarily
+set `restart: "no"` before starting Compose to avoid a failed-build loop.
+Record the source extract checksum and benchmark results in `routing-deployment.md`.
+The current verified build uses `unless-stopped`; enable this only after a new build succeeds. If it runs out of memory,
+build the same pinned image and extract on the Mac and transfer the tiles.
 
 ```bash
 cd /tmp/tankbear-deploy/valhalla
@@ -121,13 +128,15 @@ for development; see `release-readiness.md` for the release plan.)
 - **Backups:** daily, last 7 kept in `/var/lib/tankbear/backups` (price history cannot be rebuilt). Copy the newest one
   somewhere else now and then; the same disk is not a backup against losing the machine.
 - **Rotate the app key:** put the new key first in `API_KEYS` (comma-separated), update the app, then remove the old one and restart.
-- **Refresh the road graph:** change `ROUTING_GRAPH_VERSION` after rebuilding Valhalla (delete `/var/lib/valhalla/custom_files`
-  and `docker compose up -d` again) so cached route contexts differ.
+- **Refresh the road graph:** build in a separate directory, benchmark, then switch the
+  mounted graph and `ROUTING_GRAPH_VERSION` together. Keep the previous graph for rollback;
+  never delete the active graph to start an update. See `routing-deployment.md`.
 
 ## What I could not test (watch for these)
 
 - Full restore rehearsal, off-machine backups, and Docker routing operation.
-- Valhalla's memory use building Great Britain on 12 GB, and its route quality for the whole UK (only Reading to Oxford was checked).
+- National route quality and concurrent routing load; four sample journeys passed,
+  and the Great Britain build succeeded under a 9 GiB cap (see routing deployment).
 - Node's built-in SQLite under load from the app plus the refresh at once (WAL mode and a 10 second lock wait are set).
 - Long-term refresh reliability (the first live refresh succeeded without an allowlist change).
 

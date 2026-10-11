@@ -3,8 +3,14 @@
 # Never publish this port: it has no authentication.
 services:
   valhalla:
-    image: ghcr.io/valhalla/valhalla-scripted:latest
-    restart: unless-stopped
+    # 3.9.1 Arm64 manifest verified 2026-10-11 against the official registry.
+    image: ghcr.io/valhalla/valhalla-scripted:3.9.1@sha256:f182f45e9e71cbe737e6c394d68808c67a7bd12e2a4cc47c4aba864de77ecdc6
+    platform: linux/arm64
+    # Reserve memory/CPU for the API and scheduled fuel refresh.
+    mem_limit: 9g
+    memswap_limit: 9g
+    cpus: 1.5
+    restart: unless-stopped # Initial GB build verified on 2026-10-11.
     ports:
       - "127.0.0.1:8002:8002"
     volumes:

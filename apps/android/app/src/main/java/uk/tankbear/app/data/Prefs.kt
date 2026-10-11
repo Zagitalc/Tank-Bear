@@ -12,7 +12,7 @@ data class Saved(
     val fuel: FuelType = FuelType.E10,
     val mpg: String = "",
     val litres: String = "30",
-    val baseUrl: String = "http://10.0.2.2:8787",
+    val baseUrl: String = "https://tankbear.duckdns.org",
     val appKey: String = "",
     val places: List<SavedPlace> = emptyList(),
 )

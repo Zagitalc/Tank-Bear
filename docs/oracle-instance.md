@@ -1,7 +1,7 @@
 # Oracle instance record
 
 Verified on 11 October 2026. The API is deployed over HTTPS and Fuel Finder refresh
-has succeeded; routing is still pending.
+has succeeded; Great Britain routing is deployed and benchmarked.
 
 ## Provisioned resources
 
@@ -65,6 +65,8 @@ Verified over SSH:
   See [server-deploy.md](server-deploy.md).
 - First Fuel Finder refresh succeeded on 11 October at 12:12 UTC (13:12 BST),
   without an allowlist change: 8,131 stations, 8,127 priced stations.
-- Install Valhalla, build the Great Britain graph and measure journey latency.
+- Valhalla 3.9.1 is pinned by Arm64 digest; Great Britain graph built successfully.
+  It binds only to localhost:8002. Full sample searches took 0.43–1.62 seconds; see
+  [routing deployment](routing-deployment.md).
 - The 15-minute refresh and daily backup timers are enabled. History collection
   began with the first refresh at 12:11:36 UTC on 11 October 2026.
