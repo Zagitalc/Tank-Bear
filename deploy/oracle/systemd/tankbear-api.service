@@ -1,0 +1,27 @@
+[Unit]
+Description=Tank Bear API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tankbear
+Group=tankbear
+EnvironmentFile=/etc/tankbear/tankbear.env
+ExecStart=/opt/node/bin/node /opt/tankbear/backend/server/main.ts
+Restart=always
+RestartSec=3
+# The Node warning about the built-in SQLite module is expected and harmless.
+Environment=NODE_NO_WARNINGS=1
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/tankbear
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

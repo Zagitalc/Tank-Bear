@@ -1,0 +1,11 @@
+[Unit]
+Description=Tank Bear database backup
+
+[Service]
+Type=oneshot
+User=tankbear
+Group=tankbear
+ExecStart=/usr/local/bin/tankbear-backup
+ReadWritePaths=/var/lib/tankbear
+ProtectSystem=strict
+NoNewPrivileges=true

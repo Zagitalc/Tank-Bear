@@ -24,7 +24,7 @@ test("workerd serves HEAD and rejects unsupported endpoints/methods", async () =
   assert.equal(post.status, 405);
   assert.equal(post.headers.get("allow"), "GET, HEAD");
 
-  const missing = await fetch(`${base}/v1/journeys/optimise`, {
+  const missing = await fetch(`${base}/v1/unknown`, {
     method: "POST", signal: AbortSignal.timeout(5000),
   });
   assert.equal(missing.status, 404);

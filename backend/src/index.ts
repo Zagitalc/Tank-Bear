@@ -3,6 +3,7 @@ import { historyResponse } from "./api/history.ts";
 import { healthResponse } from "./api/health.ts";
 import { nearbyResponse } from "./api/nearby.ts";
 import { optimiseResponse, routingProvider } from "./api/optimise.ts";
+import { statusResponse } from "./api/status.ts";
 import type { Env } from "./env.ts";
 import { createFuelFinderClient } from "./ingestion/client.ts";
 import { runRefresh } from "./ingestion/run.ts";
@@ -47,6 +48,10 @@ async function route(request: Request, env: Env): Promise<Response> {
       return request.method === "HEAD"
         ? new Response(null, { status: response.status, headers: response.headers })
         : response;
+    }
+    if (url.pathname === "/status" && (request.method === "GET" || request.method === "HEAD")) {
+      const response = await statusResponse(createFuelRepository(env.DB));
+      return request.method === "HEAD" ? new Response(null, { status: response.status, headers: response.headers }) : response;
     }
     const historyMatch = /^\/v1\/stations\/([^/]+)\/history$/.exec(url.pathname);
     if (historyMatch && (request.method === "GET" || request.method === "HEAD")) {
