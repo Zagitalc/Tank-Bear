@@ -1,7 +1,8 @@
 # Release readiness
 
 Status at 11 October 2026: Stages 0 to 8 are built and run locally. The London VM exists with a reserved
-public IP and verified SSH; the application is not deployed or released. See `oracle-instance.md`.
+public IP and verified SSH. The API is deployed over HTTPS and scheduled Fuel Finder refreshes
+are succeeding. Great Britain routing is deployed and benchmarked; the app is not released. See `oracle-instance.md`.
 This lists what must be decided or done before anyone other than the developer uses Tank Bear. "Blocker" means do
 not release without it. Items marked "check" need a person's decision or an external answer, not code.
 
@@ -10,7 +11,7 @@ not release without it. Items marked "check" need a person's decision or an exte
 Answered by the Fuel Finder Service Team on 6 October 2026 (see `fuel-finder-contract.md`): caching, in-service trends and
 history retention are allowed; no raw redistribution or bulk export; "Fuel Finder/ICS" must be credited in the app (done).
 Remaining: confirm the exact attribution wording against the onboarding terms, keep the Nearby caps in place, and test
-production egress (WAF may restrict non-residential IPs; a static UK IP can be allowlisted on request).
+long-term production egress reliability (the first London refreshes succeeded without an allowlist change).
 
 Earlier notes, kept for history:
 
@@ -23,16 +24,18 @@ Earlier notes, kept for history:
 - The app and API never offer a raw feed or export. `/v1/stations/nearby` returns at most 50 stations per call behind an
   app key and rate limits; keep it that way. Review whether even that is acceptable once the terms are known.
 - Cloudflare Workers egress was tested on 6 October 2026 and is **not reliable** (shared addresses get locked out); ingestion
-  runs from a server with a static UK IP instead (`server-deploy.md`). Whether that address needs an allowlist is untested.
+  runs from a server with a static UK IP instead (`server-deploy.md`). The reserved Oracle London address has completed full refreshes without an allowlist change.
 
 ## 2. Hosting and operations (blocker)
 
-- Deploy the Node API and SQLite database on the existing Oracle VM using `server-deploy.md`.
+- Done: Node API and SQLite deployed on Oracle; HTTPS and authentication verified.
   Startup applies the repository's SQL migrations (currently 0001 to 0005).
-- Prove one full refresh from the reserved UK IP before enabling the 15-minute timer; provider allowlisting remains untested.
-  Alert when `last_success_at` is older than the 6-hour gate.
-- Routing: select an Arm64 Valhalla image digest, build a Great Britain graph on the same VM (Northern Ireland is not
-  covered), set an update policy, and measure latency and cost. Each journey search needs one baseline and up to 12 routes.
+- Done: full refresh from the reserved UK IP and subsequent scheduled refreshes succeeded;
+  15-minute timer enabled. Remaining: alert when `last_success_at` is older than the 6-hour gate.
+- Routing deployed: pinned Arm64 Valhalla 3.9.1, Great Britain graph, and manual update
+  policy. Four sample journeys each made 13 calls in 0.43–1.62 seconds; see
+  `routing-deployment.md`. Remaining: concurrent load and broader route-quality tests.
+  Northern Ireland is not covered.
 - Credentials and `API_KEYS` belong in the restricted `/etc/tankbear/tankbear.env` file; Caddy receives a separate
   hostname-only environment file. The routing engine binds only to localhost.
 - Verify that no coordinates, keys or bodies are logged anywhere in the production path, including proxy errors.
@@ -67,7 +70,8 @@ Earlier notes, kept for history:
 
 ## 6. Android release
 
-- Replace the debug-only items: typed server address and key in Settings, cleartext HTTP allowance, `10.0.2.2` default.
+- Replace the remaining debug-only items: typed server address and key in Settings and
+  cleartext HTTP allowance. Default server now uses the live HTTPS hostname.
 - Package name `uk.tankbear.app` is local only; confirm or change before a store listing. Decide target SDK and toolchain
   upgrades (pinned SDK 35 baseline).
 - Privacy policy and store data-safety answers: location is read once on tap; saved places stay on the device; searches
@@ -78,6 +82,9 @@ Earlier notes, kept for history:
 
 ## 7. UI work already known
 
+See [post-deployment product roadmap](product-roadmap.md) for the requested map
+cost display, one-way/return routing and registration/MPG lookup stages.
+
 The current screens are functional and honest but developer-styled. Expected changes: first-run onboarding replacing the
 Settings key and server fields; map and list combined on one screen; Nearby results on the map; a station detail screen
 with history and opening hours; saved places as chips; clearer empty, loading and failure states.
@@ -85,6 +92,8 @@ with history and opening hours; saved places as chips; clearer empty, loading an
 ## 8. Quality gates before release
 
 - Backend: `npm run check` green (177 tests; see [server verification](server-verification.md)). Add a deployed-environment smoke test.
-- Android: unit tests, lint, five instrumentation tests green on a healthy emulator and one real device.
+- Android: 19 unit tests, lint and five instrumentation tests passed on a Samsung
+  SM-S938B (Android 17); live Nearby and journey smoke tests also passed. Prior
+  emulator results remain separate from this device run.
 - A real-device run on mobile data, including permission denial and approximate location.
 - Re-read `AGENTS.md`: no commit, push, PR, deployment or release without the owner's explicit instruction for that action.

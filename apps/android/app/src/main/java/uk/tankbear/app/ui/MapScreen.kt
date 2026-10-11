@@ -1,5 +1,8 @@
 package uk.tankbear.app.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +14,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,12 +40,16 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory.circleColor
 import org.maplibre.android.style.layers.PropertyFactory.circleRadius
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
+import org.maplibre.android.style.layers.PropertyFactory.iconImage
+import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
+import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
@@ -51,6 +59,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import uk.tankbear.app.R
 import uk.tankbear.app.data.Candidate
 import uk.tankbear.app.data.Formatting
 import uk.tankbear.app.data.LatLon
@@ -99,6 +108,8 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     var fitted by rememberSaveable { mutableStateOf(0) }
+    var fitRequest by remember { mutableStateOf(0) }
+    var fittedRequest by remember { mutableStateOf(0) }
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -144,18 +155,22 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 style.addLayer(LineLayer(ROUTE_LINE, ROUTE_SRC).withProperties(
                     lineColor("#B26A00"), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addSource(GeoJsonSource(STATION_SRC))
-                style.addLayer(CircleLayer(STATION_LAYER, STATION_SRC).withProperties(
-                    circleRadius(8f), circleColor("#F4B942"), circleStrokeColor("#27231D"), circleStrokeWidth(2f)))
-                style.addLayer(CircleLayer(SELECTED_LAYER, STATION_SRC).withProperties(
-                    circleRadius(13f), circleColor("#B26A00"), circleStrokeColor("#ffffff"), circleStrokeWidth(4f))
+                style.addImage("pump", mapMarker(context, R.drawable.ic_petrol_station, 0xFF665A3A.toInt()))
+                style.addImage("pump-selected", mapMarker(context, R.drawable.ic_petrol_station, 0xFFB26A00.toInt(), selected = true))
+                style.addImage("car-start", mapMarker(context, R.drawable.ic_car, 0xFF1B5E20.toInt()))
+                style.addLayer(SymbolLayer(STATION_LAYER, STATION_SRC).withProperties(
+                    iconImage("pump"), iconAllowOverlap(true), iconIgnorePlacement(true))
+                    .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(false))) })
+                style.addLayer(SymbolLayer(SELECTED_LAYER, STATION_SRC).withProperties(
+                    iconImage("pump-selected"), iconAllowOverlap(true), iconIgnorePlacement(true))
                     .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(true))) })
                 style.addSource(GeoJsonSource(PINS_SRC))
                 style.addLayer(CircleLayer(PINS_LAYER, PINS_SRC).withProperties(
-                    circleRadius(9f),
-                    circleColor(Expression.match(Expression.get(ROLE), Expression.color(0xFF1B5E20.toInt()),
-                        Expression.stop("start", Expression.color(0xFF1B5E20.toInt())),
-                        Expression.stop("destination", Expression.color(0xFFB71C1C.toInt())))),
-                    circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
+                    circleRadius(9f), circleColor("#B71C1C"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f))
+                    .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("destination"))) })
+                style.addLayer(SymbolLayer("start-car", PINS_SRC).withProperties(
+                    iconImage("car-start"), iconAllowOverlap(true), iconIgnorePlacement(true))
+                    .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("start"))) })
                 styleReady = true
             }
             map = m
@@ -178,7 +193,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, result, selected?.stationId) {
+    LaunchedEffect(map, styleReady, result, selected?.stationId, fitRequest) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()
@@ -192,8 +207,9 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                     it.addBooleanProperty(SELECTED, c.stationId == selected?.stationId)
                 }
             }))
-        val extent = if (base.size >= 2) base else route
-        if (extent.size >= 2 && vm.fitCount != fitted) {
+        val extent = if (route.size >= 2) route else base
+        if (extent.size >= 2 && (vm.fitCount != fitted || fitRequest != fittedRequest)) {
+            fittedRequest = fitRequest
             fitted = vm.fitCount
             val bounds = LatLngBounds.Builder().includes(extent.map { LatLng(it.lat, it.lon) }).build()
             map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 90))
@@ -219,14 +235,23 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
-        StationPanel(selected, result?.candidates?.size ?: 0)
+        val candidates = result?.candidates.orEmpty()
+        val selectedIndex = candidates.indexOfFirst { it.stationId == selected?.stationId }
+        StationPanel(selected, candidates.size, result?.baselineGeometry != null,
+            onPrevious = { if (selectedIndex > 0) vm.selectStation(candidates[selectedIndex - 1].stationId) },
+            onNext = { if (selectedIndex + 1 < candidates.size) vm.selectStation(candidates[selectedIndex + 1].stationId) },
+            hasPrevious = selectedIndex > 0, hasNext = selectedIndex >= 0 && selectedIndex + 1 < candidates.size,
+            onFit = { fitRequest++ })
     }
 }
 
 @Composable
-private fun StationPanel(c: Candidate?, total: Int) {
+internal fun StationPanel(c: Candidate?, total: Int, alongJourney: Boolean,
+    onPrevious: () -> Unit = {}, onNext: () -> Unit = {},
+    hasPrevious: Boolean = false, hasNext: Boolean = false, onFit: () -> Unit = {},
+) {
     Card(Modifier.fillMaxWidth().padding(12.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.heightIn(max = 290.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (c == null) {
                 Text(
                     if (total == 0) "Run a search on the Find tab to see stations and routes here." else "Tap a station to see its route.",
@@ -234,8 +259,23 @@ private fun StationPanel(c: Candidate?, total: Int) {
                 )
             } else {
                 Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
-                Text("${Formatting.pricePerLitre(c.pencePerLitre)} · extra ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
-                Text("Grey: your direct route. Amber: the route through this station. Tap another station to compare.", style = MaterialTheme.typography.bodyMedium)
+                Text(Formatting.pricePerLitre(c.pencePerLitre))
+                val drivingLabel = if (alongJourney) "Extra detour fuel" else "Return-drive fuel"
+                Text("$drivingLabel: ${Formatting.pence(c.detourFuelCostPence)}",
+                    style = MaterialTheme.typography.titleMedium)
+                Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
+                Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)")
+                Text("${if (alongJourney) "Extra driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
+                Text(if (alongJourney) "Extra fuel versus your direct route, using the MPG and price used for this search."
+                    else "Fuel for the whole routed return trip, using the MPG and price used for this search.",
+                    style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onPrevious, enabled = hasPrevious) { Text("Previous") }
+                    TextButton(onClick = onNext, enabled = hasNext) { Text("Next") }
+                    TextButton(onClick = onFit) { Text("Fit route") }
+                }
+                Text(if (alongJourney) "Grey: direct route. Amber: via this station. Tap a pump to compare."
+                    else "Amber: your return route. Tap a pump to compare.", style = MaterialTheme.typography.bodySmall)
                 DataAttribution()
             }
         }
