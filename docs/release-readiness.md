@@ -82,6 +82,9 @@ Earlier notes, kept for history:
 
 ## 7. UI work already known
 
+See [post-deployment product roadmap](product-roadmap.md) for the requested map
+cost display, one-way/return routing and registration/MPG lookup stages.
+
 The current screens are functional and honest but developer-styled. Expected changes: first-run onboarding replacing the
 Settings key and server fields; map and list combined on one screen; Nearby results on the map; a station detail screen
 with history and opening hours; saved places as chips; clearer empty, loading and failure states.
