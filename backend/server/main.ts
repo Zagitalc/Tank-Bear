@@ -14,6 +14,7 @@ const port = Number(e.PORT ?? 8787);
 const { db, close } = openSqliteD1(databasePath);
 const env: Env = {
   DB: db,
+  ...(e.GEOAPIFY_API_KEY ? { GEOAPIFY_API_KEY: e.GEOAPIFY_API_KEY } : {}),
   ...(e.PUBLIC_APP_ACCESS ? { PUBLIC_APP_ACCESS: e.PUBLIC_APP_ACCESS } : {}),
   ...(e.API_KEYS ? { API_KEYS: e.API_KEYS } : {}),
   ...(e.ROUTING_BASE_URL ? { ROUTING_BASE_URL: e.ROUTING_BASE_URL } : {}),

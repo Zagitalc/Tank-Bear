@@ -80,7 +80,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var originLon by mutableStateOf("")
     var destLat by mutableStateOf("")
     var destLon by mutableStateOf("")
-    var formError by mutableStateOf<String?>(null)
+    private var errorMessage by mutableStateOf<String?>(null)
+    private var errorInputs by mutableStateOf<SearchInputs?>(null)
+    var formError: String?
+        get() = errorMessage.takeIf { errorInputs == inputs }
+        private set(value) { errorMessage = value; errorInputs = inputs }
+    var findResultsVersion by mutableStateOf(0)
         private set
     var search by mutableStateOf<SearchState>(SearchState.Idle)
         private set
@@ -119,7 +124,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var choosingMapLocation by mutableStateOf(false)
-    fun beginMapChoice(target: MapTarget) { mapTarget = target; choosingMapLocation = true }
+    var placePreview by mutableStateOf<LatLon?>(null)
+        private set
+    fun beginMapChoice(target: MapTarget, preview: LatLon? = null) {
+        placePreview = preview
+        mapTarget = target
+        choosingMapLocation = true
+    }
 
     val inputs: SearchInputs get() = searchInputs(mode, Validation.point(originLat, originLon),
         Validation.point(destLat, destLon), saved)
@@ -194,7 +205,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         NearbySort.Cheapest -> result.stations.sortedWith(compareBy({ it.fill == null }, { it.fill?.fillCostPence ?: Long.MAX_VALUE }, { it.distanceMetres }))
     }
 
-    private fun searchNearby() {
+    private fun searchNearby(fromFind: Boolean) {
         val origin = Validation.point(originLat, originLon) ?: return fail("Choose your start on the map or use your location.")
         val litres = Validation.litres(saved.litres) ?: return fail("Set how many litres to buy (1 to 500) on the Car tab.")
         job?.cancel()
@@ -207,6 +218,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 is ApiOutcome.NearbyOk -> {
                     selectedStationId = outcome.result.stations.firstOrNull()?.id
                     fitCount++
+                    if (fromFind && submittedInputs == inputs) findResultsVersion++
                     NearbyState.Done(outcome.result, java.time.Instant.now(), submittedInputs)
                 }
                 is ApiOutcome.Failure -> NearbyState.Failed(outcome)
@@ -215,9 +227,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun submit() {
+    fun submit(fromFind: Boolean = false) {
         formError = null
-        if (mode == Mode.Nearby) return searchNearby()
+        if (mode == Mode.Nearby) return searchNearby(fromFind)
         val origin = Validation.point(originLat, originLon)
             ?: return fail("Choose your start on the map or use your location.")
         val destination = if (mode == Mode.AlongJourney) {
@@ -236,6 +248,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 is ApiOutcome.Ok -> {
                     selectedStationId = outcome.result.candidates.firstOrNull()?.stationId
                     fitCount++
+                    if (fromFind && submittedInputs == inputs) findResultsVersion++
                     SearchState.Done(outcome, java.time.Instant.now(), submittedInputs)
                 }
                 is ApiOutcome.Failure -> SearchState.Failed(outcome)

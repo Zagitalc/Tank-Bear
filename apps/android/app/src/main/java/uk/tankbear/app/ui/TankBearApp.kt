@@ -1,5 +1,8 @@
 package uk.tankbear.app.ui
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.text.style.TextAlign
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +52,9 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
         Scaffold(
             bottomBar = {
                 Column {
-                  if (selected == Destination.Find || selected == Destination.Map) SearchActionBar(vm)
+                  if (selected == Destination.Find || selected == Destination.Map) SearchActionBar(vm, fromFind = selected == Destination.Find,
+                      onChoose = { target -> vm.beginMapChoice(target); selected = Destination.Map },
+                      onCar = { selected = Destination.Car })
                   NavigationBar {
                     Destination.entries.forEach { destination ->
                         NavigationBarItem(
@@ -71,11 +76,10 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                         .fillMaxSize()
                         .padding(padding)
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
-                    Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyLarge)
+                    FindBrand()
                     when (selected) {
                         Destination.Find -> FindScreen(vm, onShowOnMap = { selected = Destination.Map })
                         Destination.Car -> {
@@ -83,6 +87,8 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                             androidx.compose.material3.Button(
                                 enabled = Validation.mpg(vm.saved.mpg) != null && Validation.litres(vm.saved.litres) != null,
                                 onClick = { selected = Destination.Find },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp),
                             ) { Text("Find fuel") }
                         }
                         else -> SettingsScreen(vm)
@@ -95,23 +101,39 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
 
 /** Shared fixed action: search is always reachable without scrolling on Find and Map. */
 @Composable
-internal fun SearchActionBar(vm: AppViewModel) {
-    androidx.compose.material3.Surface(tonalElevation = 2.dp) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+internal fun SearchActionBar(vm: AppViewModel, fromFind: Boolean, onChoose: (MapTarget) -> Unit, onCar: () -> Unit) {
+    val missingStart = Validation.point(vm.originLat, vm.originLon) == null
+    val missingDestination = vm.mode == uk.tankbear.app.data.Mode.AlongJourney && Validation.point(vm.destLat, vm.destLon) == null
+    val correction = if (vm.formError == null) null else if (missingStart) "Choose start" else if (missingDestination) "Choose destination" else if (Validation.litres(vm.saved.litres) == null || (vm.mode != uk.tankbear.app.data.Mode.Nearby && Validation.mpg(vm.saved.mpg) == null)) "Check car details" else null
+    val failure = if (vm.mode == uk.tankbear.app.data.Mode.Nearby) (vm.nearby as? NearbyState.Failed)?.failure else (vm.search as? SearchState.Failed)?.failure
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
             vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            failure?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
             if (vm.resultsOutdated) Text("Inputs changed — previous results are outdated.", style = MaterialTheme.typography.bodySmall)
             androidx.compose.material3.Button(
-                onClick = { if (vm.loading) vm.cancel() else vm.submit() },
+                onClick = {
+                    when {
+                        vm.loading -> vm.cancel()
+                        correction != null && missingStart -> onChoose(MapTarget.Start)
+                        correction != null && missingDestination -> onChoose(MapTarget.Destination)
+                        correction != null -> onCar()
+                        else -> vm.submit(fromFind)
+                    }
+                },
                 enabled = vm.loaded && !vm.choosingMapLocation,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             ) {
                 Text(when {
                     vm.choosingMapLocation -> "Confirm your map location first"
                     vm.loading -> "Cancel search"
+                    correction != null -> correction
+                    failure != null -> "Try search again"
                     vm.resultsOutdated -> "Update results"
                     vm.mode == uk.tankbear.app.data.Mode.Nearby -> "Find nearby stations"
                     else -> "Find the best stop"
-                })
+                }, textAlign = TextAlign.Center)
             }
         }
     }

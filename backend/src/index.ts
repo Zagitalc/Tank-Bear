@@ -1,3 +1,4 @@
+import { geocodingResponse } from "./api/geocoding.ts";
 import { guard } from "./api/guard.ts";
 import { historyResponse } from "./api/history.ts";
 import { healthResponse } from "./api/health.ts";
@@ -41,6 +42,12 @@ export default {
 
 async function route(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/v1/places/search") {
+      if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST", "Cache-Control": "no-store" } });
+      const denied = await guard(request, env, createRateLimiter(env.DB), "geocoding");
+      if (denied) return denied;
+      return geocodingResponse(request, env.GEOAPIFY_API_KEY);
+    }
     if (url.pathname === "/v1/stations/nearby" && (request.method === "GET" || request.method === "HEAD")) {
       const denied = await guard(request, env, createRateLimiter(env.DB), "nearby");
       if (denied) return denied;

@@ -1,5 +1,14 @@
 package uk.tankbear.app.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.material3.CardDefaults
+import uk.tankbear.app.ui.theme.TankBearTokens
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -67,6 +76,7 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import androidx.compose.ui.graphics.toArgb
 import uk.tankbear.app.R
 import uk.tankbear.app.data.LatLon
 import uk.tankbear.app.data.Mode
@@ -88,9 +98,10 @@ private const val SELECTED = "selected"
 private const val ROLE = "role"
 
 private val CameraSaver = listSaver<CameraPosition?, Double>(
-    save = { c -> if (c == null) emptyList() else listOf(c.target!!.latitude, c.target!!.longitude, c.zoom) },
+    save = { c -> if (c == null) emptyList() else listOf(c.target!!.latitude, c.target!!.longitude, c.zoom, c.bearing, c.tilt) },
     restore = { l ->
-        if (l.size == 3) CameraPosition.Builder().target(LatLng(l[0], l[1])).zoom(l[2]).build() else null
+        if (l.size >= 3) CameraPosition.Builder().target(LatLng(l[0], l[1])).zoom(l[2])
+            .bearing(l.getOrElse(3) { 0.0 }).tilt(l.getOrElse(4) { 0.0 }).build() else null
     },
 )
 
@@ -107,12 +118,16 @@ private fun lineOf(points: List<LatLon>): FeatureCollection =
  */
 @Composable
 fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
+    val dark = isSystemInDarkTheme()
+    val mapColors = TankBearTokens.colors
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context) }
     var camera by rememberSaveable(stateSaver = CameraSaver) { mutableStateOf<CameraPosition?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
+    var styleRevision by remember { mutableStateOf(0) }
+    var restorePickerCamera by remember { mutableStateOf(camera != null && vm.choosingMapLocation) }
     var fitted by rememberSaveable { mutableStateOf(0) }
     var fitRequest by remember { mutableStateOf(0) }
     var fittedRequest by remember { mutableStateOf(0) }
@@ -150,37 +165,49 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 val id = hit?.getStringProperty(ID)
                 if (id != null) { vm.selectStation(id); true } else false
             }
-            m.setStyle(MapConfig.STYLE_URL) { style ->
-                // Bottom to top: baseline, chosen route, stations, start/destination pins.
-                style.addSource(GeoJsonSource(BASE_SRC))
-                style.addLayer(LineLayer(BASE_LINE, BASE_SRC).withProperties(
-                    lineColor("#546E7A"), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addSource(GeoJsonSource(ROUTE_SRC))
-                style.addLayer(LineLayer(ROUTE_CASING, ROUTE_SRC).withProperties(
-                    lineColor("#ffffff"), lineWidth(9f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addLayer(LineLayer(ROUTE_LINE, ROUTE_SRC).withProperties(
-                    lineColor("#B26A00"), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addSource(GeoJsonSource(STATION_SRC))
-                style.addImage("pump", mapMarker(context, R.drawable.ic_petrol_station, 0xFF665A3A.toInt()))
-                style.addImage("pump-selected", mapMarker(context, R.drawable.ic_petrol_station, 0xFFB26A00.toInt(), selected = true))
-                style.addImage("car-start", mapMarker(context, R.drawable.ic_car, 0xFF1B5E20.toInt()))
-                style.addLayer(SymbolLayer(STATION_LAYER, STATION_SRC).withProperties(
-                    iconImage("pump"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
-                    .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(false))) })
-                style.addLayer(SymbolLayer(SELECTED_LAYER, STATION_SRC).withProperties(
-                    iconImage("pump-selected"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
-                    .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(true))) })
-                style.addSource(GeoJsonSource(PINS_SRC))
-                style.addLayer(CircleLayer(PINS_LAYER, PINS_SRC).withProperties(
-                    circleRadius(9f), circleColor("#B71C1C"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f))
-                    .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("destination"))) })
-                style.addLayer(SymbolLayer("start-car", PINS_SRC).withProperties(
-                    iconImage("car-start"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
-                    .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("start"))) })
-                styleReady = true
-            }
             map = m
         }
+    }
+
+    // A style reload removes custom sources/images/layers. Recreate them, then
+    // reapply the current data through styleRevision; never reset the camera here.
+    DisposableEffect(map, dark) {
+        val m = map ?: return@DisposableEffect onDispose { }
+        var active = true
+        styleReady = false
+        val markerInk = (if (dark) mapColors.background else mapColors.surface).toArgb()
+        m.setStyle(MapConfig.styleUrl(dark)) { style ->
+            if (!active) return@setStyle
+            // Bottom to top: baseline, chosen route, stations, start/destination pins.
+            style.addSource(GeoJsonSource(BASE_SRC))
+            style.addLayer(LineLayer(BASE_LINE, BASE_SRC).withProperties(
+                lineColor(mapColors.baseline.toArgb()), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
+            style.addSource(GeoJsonSource(ROUTE_SRC))
+            style.addLayer(LineLayer(ROUTE_CASING, ROUTE_SRC).withProperties(
+                lineColor(mapColors.surface.toArgb()), lineWidth(9f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
+            style.addLayer(LineLayer(ROUTE_LINE, ROUTE_SRC).withProperties(
+                lineColor(mapColors.route.toArgb()), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
+            style.addSource(GeoJsonSource(STATION_SRC))
+            style.addImage("pump", mapMarker(context, R.drawable.ic_petrol_station, mapColors.muted.toArgb(), ink = markerInk))
+            style.addImage("pump-selected", mapMarker(context, R.drawable.ic_petrol_station, mapColors.route.toArgb(), selected = true, ink = markerInk))
+            style.addImage("car-start", mapMarker(context, R.drawable.ic_car, mapColors.start.toArgb(), ink = markerInk))
+            style.addLayer(SymbolLayer(STATION_LAYER, STATION_SRC).withProperties(
+                iconImage("pump"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(false))) })
+            style.addLayer(SymbolLayer(SELECTED_LAYER, STATION_SRC).withProperties(
+                iconImage("pump-selected"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(true))) })
+            style.addSource(GeoJsonSource(PINS_SRC))
+            style.addLayer(CircleLayer(PINS_LAYER, PINS_SRC).withProperties(
+                circleRadius(9f), circleColor(mapColors.error.toArgb()), circleStrokeColor(mapColors.surface.toArgb()), circleStrokeWidth(3f))
+                .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("destination"))) })
+            style.addLayer(SymbolLayer("start-car", PINS_SRC).withProperties(
+                iconImage("car-start"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                .also { it.setFilter(Expression.eq(Expression.get(ROLE), Expression.literal("start"))) })
+            styleRevision++
+            styleReady = true
+        }
+        onDispose { active = false }
     }
 
     val nearby = if (!vm.resultsOutdated && vm.mode == Mode.Nearby) (vm.nearby as? NearbyState.Done)?.result else null
@@ -191,15 +218,20 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val origin = Validation.point(vm.originLat, vm.originLon)
     val destination = if (vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
 
-    LaunchedEffect(map, vm.choosingMapLocation, vm.mapTarget) {
+    LaunchedEffect(map, vm.choosingMapLocation, vm.mapTarget, vm.placePreview) {
+        if (map == null) return@LaunchedEffect
         if (vm.choosingMapLocation) {
-            val target = if (vm.mapTarget == MapTarget.Destination) destination ?: origin else origin
+            if (restorePickerCamera) {
+                restorePickerCamera = false
+                return@LaunchedEffect
+            }
+            val target = vm.placePreview ?: (if (vm.mapTarget == MapTarget.Destination) destination ?: origin else origin)
             target?.let { map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.lat, it.lon), 14.0)) }
         }
     }
 
     // Start and destination pins follow the entered coordinates.
-    LaunchedEffect(map, styleReady, origin, destination) {
+    LaunchedEffect(map, styleReady, styleRevision, origin, destination) {
         val src = map?.style?.getSourceAs<GeoJsonSource>(PINS_SRC) ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val pins = listOfNotNull(origin?.let { "start" to it }, destination?.let { "destination" to it }).map { (role, p) ->
@@ -209,7 +241,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest) {
+    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()
@@ -233,54 +265,102 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    BoxWithConstraints(modifier.fillMaxSize()) {
-      var panelFraction by rememberSaveable { mutableStateOf(0.48f) }
-      val availableHeight = maxHeight
-      val density = LocalDensity.current
-      val totalPixels = with(density) { maxHeight.toPx() }
-      Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-            if (vm.choosingMapLocation) {
-                Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
-                    contentDescription = "Selected location at map centre",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.Center).size(36.dp))
-            }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+    BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        var panelFraction by rememberSaveable { mutableStateOf(0.48f) }
+        val availableHeight = maxHeight
+        val landscape = maxWidth > maxHeight
+        val totalPixels = with(LocalDensity.current) { maxHeight.toPx() }
+        val largeText = LocalDensity.current.fontScale >= 1.5f
+
+        val mapContent: @Composable (Modifier) -> Unit = { mapModifier ->
+            Box(mapModifier.clip(RoundedCornerShape(TankBearTokens.radius.card))) {
+                AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().testTag("route-map"))
                 if (vm.choosingMapLocation) {
-                    Text("Move the map to choose your ${vm.mapTarget.name.lowercase()}.")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = map != null, onClick = {
-                            map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) }
-                        }) { Text("Use this location") }
-                        TextButton(onClick = { vm.choosingMapLocation = false }) { Text("Cancel") }
-                    }
+                    Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
+                        contentDescription = "Selected location at map centre",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center).size(36.dp))
+                }
+            }
+        }
+        val controls: @Composable () -> Unit = {
+            MapLocationControls(vm, map != null, largeText,
+                onConfirm = { map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) } })
+        }
+        val results: @Composable (Modifier) -> Unit = { resultsModifier ->
+            Column(resultsModifier) {
+                if (largeText) {
+                    MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ }, header = {
+                        controls()
+                        TextButton(onClick = { fitRequest++ }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (nearby != null) "Fit stations" else "Fit route")
+                        }
+                    })
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { vm.beginMapChoice(MapTarget.Start) }) { Text("Choose start") }
-                        if (vm.mode == Mode.AlongJourney) TextButton(onClick = { vm.beginMapChoice(MapTarget.Destination) }) { Text("Choose destination") }
+                Row(Modifier.fillMaxWidth().draggable(
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { delta ->
+                        if (!landscape) panelFraction = (panelFraction - delta / totalPixels).coerceIn(0.25f, 0.55f)
+                    }), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    if (!landscape) TextButton(onClick = { panelFraction = if (panelFraction < 0.5f) 0.55f else 0.25f }, modifier = Modifier.weight(1f)) {
+                        Text(if (panelFraction < 0.5f) "More results ↑" else "More map ↓")
+                    }
+                    TextButton(onClick = { fitRequest++ }, modifier = Modifier.weight(1f)) {
+                        Text(if (nearby != null) "Fit stations" else "Fit route")
+                    }
+                }
+                MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
+                }
+            }
+        }
+        if (landscape) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                mapContent(Modifier.weight(1f).fillMaxHeight())
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (vm.choosingMapLocation) {
+                        Column(Modifier.verticalScroll(rememberScrollState())) { controls() }
+                    } else {
+                        if (!largeText) controls()
+                        results(Modifier.weight(1f))
                     }
                 }
             }
-        }
-        if (!vm.choosingMapLocation) {
-        Column(Modifier.fillMaxWidth().height(availableHeight * panelFraction)) {
-            Row(Modifier.fillMaxWidth().draggable(
-                orientation = Orientation.Vertical,
-                state = rememberDraggableState { delta ->
-                    panelFraction = (panelFraction - delta / totalPixels).coerceIn(0.25f, 0.55f)
-                }), horizontalArrangement = Arrangement.SpaceEvenly) {
-                TextButton(onClick = { panelFraction = if (panelFraction < 0.5f) 0.55f else 0.25f }) {
-                    Text(if (panelFraction < 0.5f) "More results ↑" else "More map ↓")
-                }
-                TextButton(onClick = { fitRequest++ }) { Text(if (nearby != null) "Fit stations" else "Fit route") }
+        } else if (largeText) {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                mapContent(Modifier.fillMaxWidth().height(availableHeight * 0.4f))
+                if (vm.choosingMapLocation) Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { controls() }
+                else results(Modifier.weight(1f))
             }
-            MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                mapContent(Modifier.weight(1f).fillMaxWidth())
+                controls()
+                if (!vm.choosingMapLocation) results(Modifier.fillMaxWidth().height(availableHeight * panelFraction))
+            }
         }
+    }
+}
+
+@Composable
+private fun MapLocationControls(vm: AppViewModel, mapReady: Boolean, stacked: Boolean, onConfirm: () -> Unit) {
+    val choosing = vm.choosingMapLocation
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (choosing) Text("Move the map to choose your ${vm.mapTarget.name.lowercase()}.")
+        val first: @Composable (Modifier) -> Unit = { modifier ->
+            FindPill(if (choosing) "Use this location" else "Choose start", modifier = modifier,
+                enabled = !choosing || mapReady,
+                onClick = { if (choosing) onConfirm() else vm.beginMapChoice(MapTarget.Start) })
         }
-      }
+        val second: @Composable (Modifier) -> Unit = { modifier ->
+            FindPill(if (choosing) "Cancel" else "Choose destination", modifier = modifier,
+                onClick = { if (choosing) vm.choosingMapLocation = false else vm.beginMapChoice(MapTarget.Destination) })
+        }
+        if (stacked) {
+            first(Modifier)
+            if (choosing || vm.mode == Mode.AlongJourney) second(Modifier)
+        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            first(Modifier.weight(1f))
+            if (choosing || vm.mode == Mode.AlongJourney) second(Modifier.weight(1f))
+        }
     }
 }

@@ -1,46 +1,55 @@
 package uk.tankbear.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.CompositionLocalProvider
 
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF775500),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFDEA0),
-    onPrimaryContainer = Color(0xFF261900),
-    secondaryContainer = Color(0xFFF3DFBA),
-    onSecondaryContainer = Color(0xFF292014),
-    background = Color(0xFFFFF8EE),
-    onBackground = Color(0xFF27231D),
-    surface = Color(0xFFFFF8EE),
-    onSurface = Color(0xFF27231D),
-    surfaceVariant = Color(0xFFEFE3D1),
-    onSurfaceVariant = Color(0xFF4C4539),
-)
+private fun TankBearColors.materialColors(dark: Boolean) =
+    (if (dark) darkColorScheme() else lightColorScheme()).copy(
+        primary = primary, onPrimary = onPrimary,
+        primaryContainer = soft, onPrimaryContainer = text,
+        secondary = primary, onSecondary = onPrimary,
+        secondaryContainer = soft, onSecondaryContainer = text,
+        tertiary = primary, onTertiary = onPrimary,
+        tertiaryContainer = soft, onTertiaryContainer = text,
+        background = background, onBackground = text,
+        surface = surface, onSurface = text,
+        surfaceVariant = soft, onSurfaceVariant = muted,
+        surfaceTint = primary,
+        surfaceBright = surface, surfaceDim = background,
+        surfaceContainerLowest = background, surfaceContainerLow = surface,
+        surfaceContainer = surface, surfaceContainerHigh = soft,
+        surfaceContainerHighest = soft,
+        outline = outline, outlineVariant = outline,
+        error = error, onError = background,
+        errorContainer = errorSurface, onErrorContainer = error,
+        inverseSurface = text, inverseOnSurface = background,
+        inversePrimary = if (dark) LightTankBearColors.primary else DarkTankBearColors.primary,
+    )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFF4B942),
-    onPrimary = Color(0xFF402D00),
-    primaryContainer = Color(0xFF5B4200),
-    onPrimaryContainer = Color(0xFFFFDEA0),
-    secondaryContainer = Color(0xFF51452F),
-    onSecondaryContainer = Color(0xFFF3DFBA),
-    background = Color(0xFF191712),
-    onBackground = Color(0xFFEAE2D6),
-    surface = Color(0xFF191712),
-    onSurface = Color(0xFFEAE2D6),
-    surfaceVariant = Color(0xFF4C4539),
-    onSurfaceVariant = Color(0xFFD0C5B4),
+private val TankBearShapes = Shapes(
+    extraSmall = RoundedCornerShape(TankBearRadius.small),
+    small = RoundedCornerShape(TankBearRadius.small),
+    medium = RoundedCornerShape(TankBearRadius.card),
+    large = RoundedCornerShape(TankBearRadius.card),
+    extraLarge = RoundedCornerShape(TankBearRadius.pill),
 )
 
 @Composable
 fun TankBearTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        content = content,
-    )
+    val dark = isSystemInDarkTheme()
+    val colors = if (dark) DarkTankBearColors else LightTankBearColors
+    CompositionLocalProvider(LocalTankBearColors provides colors) {
+        MaterialTheme(
+            colorScheme = colors.materialColors(dark),
+            typography = TankBearTypography,
+            shapes = TankBearShapes,
+            content = content,
+        )
+    }
 }

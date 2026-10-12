@@ -26,4 +26,19 @@ class ModeRecoveryTest {
         }
     }
 
+    @Test
+    fun correctingStartClearsValidationError() {
+        val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[uk.tankbear.app.ui.AppViewModel::class.java]
+        compose.runOnIdle {
+            vm.mode = uk.tankbear.app.data.Mode.FuelTrip
+            vm.originLat = ""
+            vm.originLon = ""
+            vm.submit(fromFind = true)
+            org.junit.Assert.assertEquals("Choose your start on the map or use your location.", vm.formError)
+            val version = vm.findResultsVersion
+            vm.useExample()
+            org.junit.Assert.assertNull(vm.formError)
+            org.junit.Assert.assertEquals(version, vm.findResultsVersion)
+        }
+    }
 }

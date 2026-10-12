@@ -42,7 +42,7 @@ async function callerBucket(request: Request, key: string): Promise<string> {
   return [...hash.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export type Route = "optimise" | "nearby" | "history";
+export type Route = "optimise" | "nearby" | "history" | "geocoding";
 
 /**
  * Gate for every /v1 route. Keyed by default; PUBLIC_APP_ACCESS=1 explicitly opts into keyless access.
@@ -64,16 +64,20 @@ export async function guard(request: Request, env: Pick<Env, "API_KEYS" | "PUBLI
   const day = Math.floor(now / 86_400_000) * 86_400;
   try {
     const caller = await callerBucket(request, publicAccess ? "public-beta" : supplied);
-    const perCaller = route === "optimise" ? LIMITS.optimisePerCallerPerMinute : route === "history" ? LIMITS.historyPerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
+    const perCaller = route === "geocoding" ? 10 : route === "optimise" ? LIMITS.optimisePerCallerPerMinute : route === "history" ? LIMITS.historyPerCallerPerMinute : LIMITS.nearbyPerCallerPerMinute;
     if ((await limiter.hit(`${route}:${caller}`, minute)) > perCaller) {
       return fail(429, "RATE_LIMITED", "Too many requests. Try again shortly.", { "Retry-After": String(60 - (Math.floor(now / 1000) - minute)) });
     }
-    const perDay = route === "optimise" ? LIMITS.optimisePerCallerPerDay : route === "history" ? LIMITS.historyPerCallerPerDay : LIMITS.nearbyPerCallerPerDay;
+    const perDay = route === "geocoding" ? 100 : route === "optimise" ? LIMITS.optimisePerCallerPerDay : route === "history" ? LIMITS.historyPerCallerPerDay : LIMITS.nearbyPerCallerPerDay;
     // Daily buckets use a distinct prefix so they never collide with minute windows.
     if ((await limiter.hit(`${route}:day:${caller}`, day)) > perDay) {
       return fail(429, "DAILY_LIMIT", "Daily limit reached. Try again tomorrow.", { "Retry-After": String(86_400 - (Math.floor(now / 1000) - day)) });
     }
-    const globalCap = route === "optimise" ? LIMITS.optimiseGlobalPerHour : route === "nearby" ? LIMITS.nearbyGlobalPerHour : LIMITS.historyGlobalPerHour;
+    // Reserve headroom below Geoapify's free daily quota, shared across all callers.
+    if (route === "geocoding" && (await limiter.hit("geocoding:all:day", day)) > 2500) {
+      return fail(429, "DAILY_LIMIT", "Place search is unavailable until tomorrow. Use the map instead.");
+    }
+    const globalCap = route === "geocoding" ? 200 : route === "optimise" ? LIMITS.optimiseGlobalPerHour : route === "nearby" ? LIMITS.nearbyGlobalPerHour : LIMITS.historyGlobalPerHour;
     if (globalCap !== null && (await limiter.hit(`${route}:all`, hour)) > globalCap) {
       return fail(429, "SERVICE_BUSY", "The service is busy. Try again later.", { "Retry-After": "300" });
     }
