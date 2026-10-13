@@ -22,6 +22,10 @@ data class TankBearColors(
     val start: Color,
     val route: Color,
     val baseline: Color,
+    val pumpBelow: Color,
+    val pumpAround: Color,
+    val pumpAbove: Color,
+    val pumpUnknown: Color,
 )
 
 internal val LightTankBearColors = TankBearColors(
@@ -38,6 +42,10 @@ internal val LightTankBearColors = TankBearColors(
     start = Color(0xFF21613D),
     route = Color(0xFF875500),
     baseline = Color(0xFF52636F),
+    pumpBelow = Color(0xFF21613D),
+    pumpAround = Color(0xFF775500),
+    pumpAbove = Color(0xFFA52A25),
+    pumpUnknown = Color(0xFF625743),
 )
 
 internal val DarkTankBearColors = TankBearColors(
@@ -54,6 +62,10 @@ internal val DarkTankBearColors = TankBearColors(
     start = Color(0xFF9FD6AB),
     route = Color(0xFFF4B942),
     baseline = Color(0xFFB8CBD8),
+    pumpBelow = Color(0xFF9FD6AB),
+    pumpAround = Color(0xFFF4B942),
+    pumpAbove = Color(0xFFFFB4AB),
+    pumpUnknown = Color(0xFFCEBEA5),
 )
 
 internal val LocalTankBearColors = staticCompositionLocalOf { LightTankBearColors }

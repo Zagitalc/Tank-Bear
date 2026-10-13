@@ -67,6 +67,9 @@ import org.maplibre.android.style.layers.PropertyFactory.iconSize
 import org.maplibre.android.style.layers.PropertyFactory.iconImage
 import org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap
 import org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement
+import org.maplibre.android.style.layers.PropertyFactory.iconAnchor
+import org.maplibre.android.style.layers.PropertyFactory.iconPadding
+import org.maplibre.android.style.layers.PropertyFactory.symbolSortKey
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
@@ -96,6 +99,7 @@ private const val PINS_LAYER = "pins-layer"
 private const val ID = "id"
 private const val SELECTED = "selected"
 private const val ROLE = "role"
+private const val MARKER_IMAGE = "markerImage"
 
 private val CameraSaver = listSaver<CameraPosition?, Double>(
     save = { c -> if (c == null) emptyList() else listOf(c.target!!.latitude, c.target!!.longitude, c.zoom, c.bearing, c.tilt) },
@@ -120,6 +124,7 @@ private fun lineOf(points: List<LatLon>): FeatureCollection =
 fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val dark = isSystemInDarkTheme()
     val mapColors = TankBearTokens.colors
+    val fontScale = LocalDensity.current.fontScale
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context) }
@@ -131,6 +136,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     var fitted by rememberSaveable { mutableStateOf(0) }
     var fitRequest by remember { mutableStateOf(0) }
     var fittedRequest by remember { mutableStateOf(0) }
+    val markerImageIds = remember { mutableSetOf<String>() }
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -188,14 +194,17 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
             style.addLayer(LineLayer(ROUTE_LINE, ROUTE_SRC).withProperties(
                 lineColor(mapColors.route.toArgb()), lineWidth(5f), lineCap(Property.LINE_CAP_ROUND), lineJoin(Property.LINE_JOIN_ROUND)))
             style.addSource(GeoJsonSource(STATION_SRC))
-            style.addImage("pump", mapMarker(context, R.drawable.ic_petrol_station, mapColors.muted.toArgb(), ink = markerInk))
-            style.addImage("pump-selected", mapMarker(context, R.drawable.ic_petrol_station, mapColors.route.toArgb(), selected = true, ink = markerInk))
+            markerImageIds.clear()
             style.addImage("car-start", mapMarker(context, R.drawable.ic_car, mapColors.start.toArgb(), ink = markerInk))
+            // MapLibre places higher symbol layers first. Keep selection above the
+            // ordinary pills so it reserves collision space and stays on top.
             style.addLayer(SymbolLayer(STATION_LAYER, STATION_SRC).withProperties(
-                iconImage("pump"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                iconImage(Expression.get(MARKER_IMAGE)), iconSize(1f), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                iconAllowOverlap(false), iconIgnorePlacement(false), iconPadding(3f), symbolSortKey(Expression.get("markerOrder")))
                 .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(false))) })
             style.addLayer(SymbolLayer(SELECTED_LAYER, STATION_SRC).withProperties(
-                iconImage("pump-selected"), iconSize(1.2f), iconAllowOverlap(true), iconIgnorePlacement(true))
+                iconImage(Expression.get(MARKER_IMAGE)), iconSize(1f), iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                iconAllowOverlap(true), iconIgnorePlacement(false), iconPadding(3f))
                 .also { it.setFilter(Expression.eq(Expression.get(SELECTED), Expression.literal(true))) })
             style.addSource(GeoJsonSource(PINS_SRC))
             style.addLayer(CircleLayer(PINS_LAYER, PINS_SRC).withProperties(
@@ -215,6 +224,10 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val visibleCandidates = result?.candidates.orEmpty().filter { !vm.mapOpenOnly || it.opening.state == "open" }
     val visibleNearby = nearby?.stations.orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
     val selected = visibleCandidates.firstOrNull { it.stationId == vm.selectedStationId }
+    // Keep the comparison stable when sorting or applying Open now; all prices are
+    // for the searched grade, never prices for another fuel or inferred brands.
+    val priceMedian = if (nearby != null) MapPrices.price(nearby.localMedianPencePerLitre)
+        else MapPrices.median(result?.candidates.orEmpty().map { it.pencePerLitre })
     val origin = Validation.point(vm.originLat, vm.originLon)
     val destination = if (vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
 
@@ -241,27 +254,65 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest) {
+    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest, fontScale, dark, mapColors) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()
         style.getSourceAs<GeoJsonSource>(BASE_SRC)?.setGeoJson(lineOf(base))
         val route = selected?.let { Polyline.decode(it.routeGeometry) }.orEmpty()
         style.getSourceAs<GeoJsonSource>(ROUTE_SRC)?.setGeoJson(lineOf(route))
-        style.getSourceAs<GeoJsonSource>(STATION_SRC)?.setGeoJson(FeatureCollection.fromFeatures(
-            (visibleCandidates.map { it.stationId to it.position } +
-                visibleNearby.map { it.id to it.position }).map { (id, position) ->
-                Feature.fromGeometry(Point.fromLngLat(position.lon, position.lat)).also {
-                    it.addStringProperty(ID, id)
-                    it.addBooleanProperty(SELECTED, id == vm.selectedStationId)
-                }
-            }))
+        val prices = visibleCandidates.associate { it.stationId to it.pencePerLitre } +
+            visibleNearby.associate { it.id to it.fill?.pencePerLitre }
+        val nextImages = mutableSetOf<String>()
+        var markerHalfWidth = 0f
+        var markerHeight = 0f
+        val features = (visibleCandidates.map { it.stationId to it.position } +
+            visibleNearby.map { it.id to it.position }).mapIndexed { index, (id, position) ->
+            val value = prices[id]
+            val band = MapPrices.band(value, priceMedian)
+            val chosen = id == vm.selectedStationId
+            val fill = when (band) {
+                PumpPriceBand.Below -> mapColors.pumpBelow
+                PumpPriceBand.Around -> mapColors.pumpAround
+                PumpPriceBand.Above -> mapColors.pumpAbove
+                PumpPriceBand.Unknown -> mapColors.pumpUnknown
+            }
+            val imageId = "price-marker-$index"
+            nextImages.add(imageId)
+            val marker = priceMarker(context, MapPrices.label(value), fill.toArgb(),
+                (if (dark) mapColors.background else mapColors.surface).toArgb(),
+                (if (chosen) mapColors.text else mapColors.surface).toArgb(), chosen, fontScale)
+            markerHalfWidth = maxOf(markerHalfWidth, marker.width / 4f) // 2× image, half its logical width.
+            markerHeight = maxOf(markerHeight, marker.height / 2f)
+            style.addImage(imageId, marker)
+            Feature.fromGeometry(Point.fromLngLat(position.lon, position.lat)).also {
+                it.addStringProperty(ID, id)
+                it.addStringProperty(MARKER_IMAGE, imageId)
+                it.addStringProperty("priceLabel", MapPrices.label(value))
+                it.addStringProperty("priceBand", band.name)
+                it.addStringProperty("markerTheme", if (dark) "dark" else "light")
+                it.addNumberProperty("markerOrder", index)
+                it.addBooleanProperty(SELECTED, chosen)
+            }
+        }
+        style.getSourceAs<GeoJsonSource>(STATION_SRC)?.setGeoJson(FeatureCollection.fromFeatures(features))
+        (markerImageIds - nextImages).forEach { style.removeImage(it) }
+        markerImageIds.clear()
+        markerImageIds.addAll(nextImages)
         val extent = if (nearby != null) visibleNearby.map { it.position } + listOfNotNull(origin) else if (route.size >= 2) route else base
         if (!vm.choosingMapLocation && extent.size >= 2 && (vm.fitCount != fitted || fitRequest != fittedRequest)) {
             fittedRequest = fitRequest
             fitted = vm.fitCount
             val bounds = LatLngBounds.Builder().includes(extent.map { LatLng(it.lat, it.lon) }).build()
-            map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 90))
+            // Pill anchors sit below their labels. The old 90px inset clipped them
+            // on dense screens; account for their real logical dimensions and text scale.
+            val density = context.resources.displayMetrics.density
+            val side = maxOf(90, kotlin.math.ceil((markerHalfWidth + 12) * density).toInt())
+                .coerceAtMost((mapView.width / 2 - 1).coerceAtLeast(0))
+            val bottom = 90.coerceAtMost((mapView.height / 3).coerceAtLeast(0))
+            val top = maxOf(90, kotlin.math.ceil((markerHeight + 12) * density).toInt())
+                .coerceAtMost((mapView.height - bottom - 1).coerceAtLeast(0))
+            map?.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, side, top, side, bottom))
         }
     }
 

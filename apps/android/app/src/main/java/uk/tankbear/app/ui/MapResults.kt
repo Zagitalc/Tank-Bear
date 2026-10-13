@@ -35,6 +35,9 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
     val nearbyState = if (nearbyMode) vm.nearby as? NearbyState.Done else null
     val result = journeyState?.outcome?.result
     val nearby = nearbyState?.result
+    val median = if (nearbyMode) MapPrices.price(nearby?.localMedianPencePerLitre)
+        else MapPrices.median(result?.candidates.orEmpty().map { it.pencePerLitre })
+    val medianScope = if (nearbyMode) "the local median" else "the median among routed stations checked"
     val candidates = orderedCandidates(result?.candidates.orEmpty(), vm.routeSort).filter { !vm.mapOpenOnly || it.opening.state == "open" }
     val stations = nearby?.let(vm::sortedNearby).orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
     val ids = if (nearbyMode) stations.map { it.id } else candidates.map { it.stationId }
@@ -60,6 +63,12 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
         item(key = "summary") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (result != null || nearby != null) Text("${ids.size} stations", style = MaterialTheme.typography.titleMedium)
+                if (result != null || nearby != null) {
+                    Text("Map labels: pump price in p/L for your selected fuel.", style = TankBearType.caption)
+                    if (median != null) Text("Green: below. Amber: within 1p/L. Red: above. Compared with $medianScope (${MapPrices.label(median.toPlainString())}/L). Grey: comparison unavailable.", style = TankBearType.caption)
+                    else Text("Grey: no price comparison available. Zoom in for more labels.", style = TankBearType.caption)
+                    if (median != null) Text("Zoom in for more labels. Price colours do not include driving costs.", style = TankBearType.caption)
+                }
                 DataAttribution()
                 val feed = result?.feedLastSuccessfulRefresh ?: nearby?.feedLastSuccessfulRefresh
                 feed?.let { Text("Prices checked ${Formatting.age(it, now)}. Price changes are shown separately.") }
@@ -87,6 +96,7 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
                 Text("${c.rank}. ${c.name}", style = TankBearType.heading)
                 if (c.stationId == result.bestOverallId) Text("Best overall among stations checked", color = MaterialTheme.colorScheme.primary)
                 Text(Formatting.pricePerLitre(c.pencePerLitre), style = TankBearType.price)
+                Text(MapPrices.comparison(c.pencePerLitre, median, medianScope), style = TankBearType.caption)
                 Text("Price changed ${Formatting.age(c.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
                 Text(Formatting.opening(c.opening))
                 Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
@@ -102,10 +112,14 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
         items(stations, key = { it.id }) { s ->
             ResultCard(s.id == vm.selectedStationId, { onSelect(s.id) }) {
                 Text(s.name, style = TankBearType.heading)
+                s.brand?.takeIf { it.isNotBlank() && !s.name.contains(it, ignoreCase = true) }?.let {
+                    Text(it, style = MaterialTheme.typography.titleMedium)
+                }
                 Text("${Formatting.metresAsMiles(s.distanceMetres)} away (straight line) · ${Formatting.opening(s.opening)}")
                 if (s.temporaryClosure) Text("Reported temporarily closed.")
                 s.fill?.let {
                     Text(Formatting.pricePerLitre(it.pencePerLitre), style = TankBearType.price)
+                    Text(MapPrices.comparison(it.pencePerLitre, median, medianScope), style = TankBearType.caption)
                     Text("Price changed ${Formatting.age(it.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
                     Text("Fill ${Formatting.pence(it.fillCostPence)} · driving not calculated", style = MaterialTheme.typography.titleSmall)
                     HistoryControl(vm, s.id, now)
