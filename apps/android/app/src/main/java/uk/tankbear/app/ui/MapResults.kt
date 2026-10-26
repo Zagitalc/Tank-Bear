@@ -1,5 +1,7 @@
 package uk.tankbear.app.ui
 
+import uk.tankbear.app.ui.theme.TankBearTokens
+import uk.tankbear.app.ui.theme.TankBearType
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
@@ -23,7 +25,7 @@ internal fun orderedCandidates(candidates: List<Candidate>, sort: RouteSort): Li
 }
 
 @Composable
-internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
+internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@Composable () -> Unit)? = null) {
     if (vm.resultsOutdated) {
         Text("Update results to compare stations for your new inputs.", Modifier.padding(16.dp))
         return
@@ -33,30 +35,40 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
     val nearbyState = if (nearbyMode) vm.nearby as? NearbyState.Done else null
     val result = journeyState?.outcome?.result
     val nearby = nearbyState?.result
+    val median = if (nearbyMode) MapPrices.price(nearby?.localMedianPencePerLitre)
+        else MapPrices.median(result?.candidates.orEmpty().map { it.pencePerLitre })
+    val medianScope = if (nearbyMode) "the local median" else "the median among routed stations checked"
     val candidates = orderedCandidates(result?.candidates.orEmpty(), vm.routeSort).filter { !vm.mapOpenOnly || it.opening.state == "open" }
     val stations = nearby?.let(vm::sortedNearby).orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
     val ids = if (nearbyMode) stations.map { it.id } else candidates.map { it.stationId }
     val listState = rememberLazyListState()
     LaunchedEffect(vm.selectedStationId, ids) {
         val index = ids.indexOf(vm.selectedStationId)
-        if (index >= 0) listState.animateScrollToItem(index + 1)
+        if (index >= 0) listState.animateScrollToItem(index + if (header == null) 1 else 2)
     }
     val now = java.time.Instant.now()
     Column(Modifier.fillMaxSize()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (nearbyMode) NearbySort.entries.forEach { sort ->
-                        FilterChip(selected = vm.nearbySort == sort, onClick = { vm.nearbySort = sort }, label = { Text(sort.name) })
+                        ResultSortPill(sort.name, vm.nearbySort == sort) { vm.nearbySort = sort }
                     } else RouteSort.entries.forEach { sort ->
-                        FilterChip(selected = vm.routeSort == sort, onClick = { vm.routeSort = sort }, label = { Text(sort.label) })
+                        ResultSortPill(sort.label, vm.routeSort == sort) { vm.routeSort = sort }
                     }
-                    FilterChip(selected = vm.mapOpenOnly, onClick = { vm.mapOpenOnly = !vm.mapOpenOnly }, label = { Text("Open now") })
+                    ResultSortPill("Open now", vm.mapOpenOnly) { vm.mapOpenOnly = !vm.mapOpenOnly }
                 }
     LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        contentPadding = PaddingValues(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (header != null) item(key = "map-controls") { header() }
         item(key = "summary") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("${ids.size} stations", style = MaterialTheme.typography.titleMedium)
+                if (result != null || nearby != null) Text("${ids.size} stations", style = MaterialTheme.typography.titleMedium)
+                if (result != null || nearby != null) {
+                    Text("Map labels: pump price in p/L for your selected fuel.", style = TankBearType.caption)
+                    if (median != null) Text("Green: below. Amber: within 1p/L. Red: above. Compared with $medianScope (${MapPrices.label(median.toPlainString())}/L). Grey: comparison unavailable.", style = TankBearType.caption)
+                    else Text("Grey: no price comparison available. Zoom in for more labels.", style = TankBearType.caption)
+                    if (median != null) Text("Zoom in for more labels. Price colours do not include driving costs.", style = TankBearType.caption)
+                }
                 DataAttribution()
                 val feed = result?.feedLastSuccessfulRefresh ?: nearby?.feedLastSuccessfulRefresh
                 feed?.let { Text("Prices checked ${Formatting.age(it, now)}. Price changes are shown separately.") }
@@ -75,17 +87,20 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
                 if (loading) { Text("Checking stations…"); TextButton(onClick = vm::cancel) { Text("Cancel") } }
                 failure?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
                 if (!loading && failure == null && ids.isEmpty()) Text(if (result == null && nearby == null)
-                    "Run a search on Find to see its map and results here." else "No stations match this search or filter.")
+                    "Choose your start, then use the search button below." else if (vm.mapOpenOnly) "No stations match the Open now filter. Turn it off to see all results." else "No suitable stations found. Try another start or route, and check your selected fuel.")
+                if (ids.isEmpty() && vm.mapOpenOnly && (result != null || nearby != null)) TextButton(onClick = { vm.mapOpenOnly = false }) { Text("Show all results") }
             }
         }
         if (result != null) items(candidates, key = { it.stationId }) { c ->
             ResultCard(c.stationId == vm.selectedStationId, { onSelect(c.stationId) }) {
-                Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
+                Text("${c.rank}. ${c.name}", style = TankBearType.heading)
                 if (c.stationId == result.bestOverallId) Text("Best overall among stations checked", color = MaterialTheme.colorScheme.primary)
-                Text("${Formatting.pricePerLitre(c.pencePerLitre)} · price changed ${Formatting.age(c.priceLastUpdated, now)}")
+                Text(Formatting.pricePerLitre(c.pencePerLitre), style = TankBearType.price)
+                Text(MapPrices.comparison(c.pencePerLitre, median, medianScope), style = TankBearType.caption)
+                Text("Price changed ${Formatting.age(c.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
                 Text(Formatting.opening(c.opening))
                 Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
-                Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)", style = MaterialTheme.typography.titleSmall)
+                Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)", style = TankBearType.heading)
                 Text("${if (result.baselineGeometry != null) "Extra detour" else if (result.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
                 Text("Using the MPG and fuel price from this search.", style = MaterialTheme.typography.bodySmall)
                 val reference = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
@@ -96,11 +111,16 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
         }
         items(stations, key = { it.id }) { s ->
             ResultCard(s.id == vm.selectedStationId, { onSelect(s.id) }) {
-                Text(s.name, style = MaterialTheme.typography.titleMedium)
+                Text(s.name, style = TankBearType.heading)
+                s.brand?.takeIf { it.isNotBlank() && !s.name.contains(it, ignoreCase = true) }?.let {
+                    Text(it, style = MaterialTheme.typography.titleMedium)
+                }
                 Text("${Formatting.metresAsMiles(s.distanceMetres)} away (straight line) · ${Formatting.opening(s.opening)}")
                 if (s.temporaryClosure) Text("Reported temporarily closed.")
                 s.fill?.let {
-                    Text("${Formatting.pricePerLitre(it.pencePerLitre)} · price changed ${Formatting.age(it.priceLastUpdated, now)}")
+                    Text(Formatting.pricePerLitre(it.pencePerLitre), style = TankBearType.price)
+                    Text(MapPrices.comparison(it.pencePerLitre, median, medianScope), style = TankBearType.caption)
+                    Text("Price changed ${Formatting.age(it.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
                     Text("Fill ${Formatting.pence(it.fillCostPence)} · driving not calculated", style = MaterialTheme.typography.titleSmall)
                     HistoryControl(vm, s.id, now)
                 } ?: Text("No price for your fuel here.")
@@ -113,8 +133,9 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit) {
 @Composable
 private fun ResultCard(selected: Boolean, onSelect: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Card(onClick = onSelect, modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface),
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (selected) Text("Selected on map", style = MaterialTheme.typography.labelLarge)
             content()
         }
@@ -123,6 +144,6 @@ private fun ResultCard(selected: Boolean, onSelect: () -> Unit, content: @Compos
 
 @Composable
 private fun HistoryControl(vm: AppViewModel, id: String, now: java.time.Instant) {
-    TextButton(onClick = { vm.toggleHistory(id) }) { Text(if (vm.histories.containsKey(id)) "Hide history" else "Price history") }
+    FindPill(if (vm.histories.containsKey(id)) "Hide history" else "Price history", onClick = { vm.toggleHistory(id) })
     HistoryPanel(vm, id, now)
 }

@@ -11,5 +11,8 @@
     "typecheck": "npm run typecheck --workspace backend",
     "build": "npm run build --workspace backend",
     "check": "npm run typecheck && npm test && npm run build"
+  },
+  "overrides": {
+    "undici": "7.30.1"
   }
 }

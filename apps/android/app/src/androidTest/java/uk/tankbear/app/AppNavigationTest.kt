@@ -23,6 +23,10 @@ class AppNavigationTest {
     /** Saved places persist on the device between runs; start every test with none so labels are unambiguous. */
     @Before
     fun removeAnySavedPlaces() {
+        compose.runOnUiThread { compose.activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        val vm = androidx.lifecycle.ViewModelProvider(compose.activity)[uk.tankbear.app.ui.AppViewModel::class.java]
+        compose.waitUntil(10_000) { vm.loaded }
+        compose.runOnIdle { vm.update { it.copy(mpg = "40", litres = "30") } }
         compose.onNodeWithText("Find").performClick()
         while (compose.onAllNodesWithText("Remove").fetchSemanticsNodes().isNotEmpty()) {
             compose.onAllNodesWithText("Remove")[0].performScrollTo().performClick()
@@ -85,7 +89,7 @@ class AppNavigationTest {
     @Test
     fun aMissingCarSettingGivesAClearMessageInsteadOfASearch() {
         tab("Car").performClick()
-        compose.onNodeWithText("Miles per Imperial gallon (MPG)").performTextReplacement("")
+        compose.onNodeWithText("Miles per Imperial gallon (MPG)").performScrollTo().performTextReplacement("")
         tab("Find").performClick()
         compose.onNodeWithText("Fill in an example (Reading to Oxford)").performScrollTo().performClick()
         compose.onNodeWithText("Find the best stop").performClick()
@@ -108,8 +112,8 @@ class AppNavigationTest {
     @Test
     fun theMapTabExplainsItselfBeforeAnySearch() {
         tab("Map").performClick()
-        compose.onNodeWithText("Long-press the map to set the start").assertIsDisplayed()
-        compose.onNodeWithText("Choose destination on map").assertIsDisplayed()
-        compose.onNodeWithText("Run a search on the Find tab", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Choose start").assertIsDisplayed()
+        compose.onNodeWithText("Choose destination").assertIsDisplayed()
+        compose.onNodeWithText("Choose your start, then use the search button below.").assertIsDisplayed()
     }
 }

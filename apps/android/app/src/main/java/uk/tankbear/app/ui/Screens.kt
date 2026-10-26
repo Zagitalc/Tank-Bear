@@ -1,5 +1,17 @@
 package uk.tankbear.app.ui
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.text.style.TextAlign
+import uk.tankbear.app.ui.theme.TankBearTokens
+import uk.tankbear.app.ui.theme.TankBearType
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.FilterChipDefaults
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -40,6 +52,11 @@ import androidx.core.content.ContextCompat
 import uk.tankbear.app.data.NearbyStation
 import uk.tankbear.app.data.NearbyResult
 import androidx.compose.material3.Text
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
@@ -70,25 +87,40 @@ private fun <T> Choice(label: String, selected: Boolean, onSelect: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
+    val resultsAnchor = remember { BringIntoViewRequester() }
+    var seenVersion by remember { mutableStateOf(vm.findResultsVersion) }
+    LaunchedEffect(vm.findResultsVersion) {
+        if (vm.findResultsVersion != seenVersion) {
+            seenVersion = vm.findResultsVersion
+            withFrameNanos { }
+            resultsAnchor.bringIntoView()
+        }
+    }
+    val resultsModifier = Modifier.bringIntoViewRequester(resultsAnchor)
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Make your fuel stop count", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Compare pump prices with the extra driving needed to reach each station.",
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge, color = TankBearTokens.colors.muted,
         )
-        Column(Modifier.selectableGroup()) {
-            Choice<Mode>("Along my journey", vm.mode == Mode.AlongJourney) { vm.mode = Mode.AlongJourney }
-            Choice<Mode>("Fuel trip (there and back from here)", vm.mode == Mode.FuelTrip) { vm.mode = Mode.FuelTrip }
-            Choice<Mode>("Nearby stations (no journey)", vm.mode == Mode.Nearby) { vm.mode = Mode.Nearby }
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+          Column(Modifier.selectableGroup().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            JourneyChoice("Along my journey", vm.mode == Mode.AlongJourney) { vm.mode = Mode.AlongJourney }
+            JourneyChoice("Fuel trip (there and back from here)", vm.mode == Mode.FuelTrip) { vm.mode = Mode.FuelTrip }
+            JourneyChoice("Nearby stations (no journey)", vm.mode == Mode.Nearby) { vm.mode = Mode.Nearby }
         }
-        Text(if (Validation.point(vm.originLat, vm.originLon) == null) "Start: not set" else "Start: location selected")
-        OutlinedButton(onClick = { vm.beginMapChoice(MapTarget.Start); onShowOnMap() }) { Text("Choose start on map") }
+        }
+        LocationSummary("Start", Validation.point(vm.originLat, vm.originLon) != null)
+        FindPill("Choose start on map", onClick = { vm.beginMapChoice(MapTarget.Start); onShowOnMap() })
         LocationButton(vm)
+        PlaceSearch(vm, MapTarget.Start, onShowOnMap)
         if (vm.mode == Mode.AlongJourney) {
-            Text(if (Validation.point(vm.destLat, vm.destLon) == null) "Destination: not set" else "Destination: location selected")
-            OutlinedButton(onClick = { vm.beginMapChoice(MapTarget.Destination); onShowOnMap() }) { Text("Choose destination on map") }
+            PlaceSearch(vm, MapTarget.Destination, onShowOnMap)
+            LocationSummary("Destination", Validation.point(vm.destLat, vm.destLon) != null)
+            FindPill("Choose destination on map", onClick = { vm.beginMapChoice(MapTarget.Destination); onShowOnMap() })
         }
         var coordinatesExpanded by rememberSaveable { mutableStateOf(false) }
         TextButton(onClick = { coordinatesExpanded = !coordinatesExpanded }) { Text(if (coordinatesExpanded) "Hide coordinates" else "Enter coordinates (optional)") }
@@ -97,33 +129,33 @@ fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
             if (vm.mode == Mode.AlongJourney) CoordinateRow(vm.destLat, vm.destLon, { vm.destLat = it }, { vm.destLon = it }, "Destination")
         }
         SavedPlaces(vm)
-        OutlinedButton(onClick = vm::useExample) { Text("Fill in an example (Reading to Oxford)") }
+        FindPill("Fill in an example (Reading to Oxford)", onClick = vm::useExample)
         if (vm.resultsOutdated) {
             Text("Previous results are outdated. Update results for your new locations or car settings.")
             return@Column
         }
         if (vm.mode == Mode.Nearby) {
-            if (vm.nearby is NearbyState.Done) OutlinedButton(onClick = onShowOnMap) { Text("Map and results") }
-            NearbySection(vm)
+            if (vm.nearby is NearbyState.Done) FindPill("Map and results", onClick = onShowOnMap)
+            NearbySection(vm, resultsModifier)
             return@Column
         }
         when (val s = vm.search) {
             SearchState.Idle -> Unit
-            SearchState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator()
+            SearchState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                CircularProgressIndicator(Modifier.size(24.dp))
                 Text("Checking stations and routes…")
                 OutlinedButton(onClick = vm::cancel) { Text("Cancel") }
             }
             is SearchState.Failed -> Card(
                 Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(s.failure.message, style = MaterialTheme.typography.bodyLarge)
                     s.failure.retryAfterSeconds?.let { Text("Try again in about $it seconds.") }
                 }
             }
-            is SearchState.Done -> Results(s.outcome.result, s.at, vm, onShowOnMap)
+            is SearchState.Done -> Results(s.outcome.result, s.at, vm, onShowOnMap, resultsModifier)
         }
     }
 }
@@ -149,9 +181,9 @@ fun DataAttribution() {
 }
 
 @Composable
-private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewModel, onShowOnMap: () -> Unit) {
+private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewModel, onShowOnMap: () -> Unit, resultsModifier: Modifier = Modifier) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(result.scope, style = MaterialTheme.typography.titleMedium)
+        Text(result.scope, style = TankBearType.heading)
         DataAttribution()
         Text(
             "Routed ${result.stationsRouted} of ${result.stationsInSearchArea} stations near your route" +
@@ -169,10 +201,20 @@ private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewMo
             style = MaterialTheme.typography.bodyMedium,
         )
         if (!result.ranked || result.candidates.isEmpty()) {
-            Text("No station could be compared for this trip.", style = MaterialTheme.typography.bodyLarge)
+            Text("No suitable stations could be compared for this trip. Try a different start or route, and check your selected fuel. Closed stations or missing prices can limit results.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
         }
+        if (result.candidates.isNotEmpty()) Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
         val referenceName = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
-        result.candidates.forEach { StationCard(it, result, referenceName, now, vm) { vm.selectStation(it.stationId); onShowOnMap() } }
+        val shown = orderedCandidates(result.candidates, vm.routeSort).filter { !vm.mapOpenOnly || it.opening.state == "open" }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RouteSort.entries.forEach { sort -> ResultSortPill(sort.label, vm.routeSort == sort) { vm.routeSort = sort } }
+            ResultSortPill("Open now", vm.mapOpenOnly) { vm.mapOpenOnly = !vm.mapOpenOnly }
+        }
+        if (shown.isEmpty() && result.candidates.isNotEmpty()) {
+            Text("No stations match the Open now filter. Turn it off to see all results.")
+            FindPill("Show all results", onClick = { vm.mapOpenOnly = false })
+        }
+        shown.forEach { StationCard(it, result, referenceName, now, vm) { vm.selectStation(it.stationId); onShowOnMap() } }
     }
 }
 
@@ -183,24 +225,23 @@ private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, 
         if (c.stationId == r.cheapestPumpId) add("Cheapest pump")
         if (c.stationId == r.smallestDetourId) add("Smallest detour")
     }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+        Column(Modifier.padding(TankBearTokens.space.dp16), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp12)) {
             if (labels.isNotEmpty()) Text(labels.joinToString(" · "), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text("${c.rank}. ${c.name}", style = MaterialTheme.typography.titleMedium)
-            Text("${Formatting.pricePerLitre(c.pencePerLitre)} · price changed ${Formatting.age(c.priceLastUpdated, now)}")
+            Text("${c.rank}. ${c.name}", style = TankBearType.heading)
+            Text(Formatting.pricePerLitre(c.pencePerLitre), style = TankBearType.price)
+            Text("Price changed ${Formatting.age(c.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
             Text(Formatting.opening(c.opening), style = MaterialTheme.typography.bodyMedium)
             Text("${if (r.baselineGeometry != null) "Extra driving" else if (r.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
             Text("Fill ${Formatting.pence(c.fillCostPence)} + ${if (r.baselineGeometry != null) "detour" else if (r.oneWay) "one-way driving" else "return driving"} fuel ${Formatting.pence(c.detourFuelCostPence)}")
+            Text("Total for this stop ${Formatting.pence(c.comparisonCostPence)}", style = TankBearType.heading)
             val headline = if (c.stationId == r.referenceStationId) "This is the comparison station" else Formatting.savingHeadline(c.trueSavingPence, referenceName)
             Text(headline, style = MaterialTheme.typography.titleSmall)
             if (c.stationId != r.referenceStationId && Formatting.isSmallDifference(c.trueSavingPence)) {
                 Text("A difference this small is within the estimate's margin.", style = MaterialTheme.typography.bodyMedium)
             }
-            Text("Total for this stop ${Formatting.pence(c.comparisonCostPence)}", style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onMap) { Text("Show route on map") }
-                OutlinedButton(onClick = { vm.toggleHistory(c.stationId) }) { Text(if (vm.histories.containsKey(c.stationId)) "Hide history" else "Price history") }
-            }
+            FindPill(if (vm.histories.containsKey(c.stationId)) "Hide history" else "Price history", onClick = { vm.toggleHistory(c.stationId) })
+            FindPill("Show route on map", onClick = onMap)
             HistoryPanel(vm, c.stationId, now)
         }
     }
@@ -209,32 +250,46 @@ private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, 
 @Composable
 fun CarScreen(vm: AppViewModel) {
     val s = vm.saved
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Your car, your fuel costs", style = MaterialTheme.typography.headlineSmall)
-        Text("Use your car's fuel type and Imperial MPG to estimate what a detour costs.", style = MaterialTheme.typography.bodyLarge)
-        Column(Modifier.selectableGroup()) {
-            vm.fuelOptions().forEach { f -> Choice<Unit>(f.label, s.fuel == f) { vm.update { it.copy(fuel = f) } } }
+    Column(verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
+        Text("Your car, your fuel costs", style = TankBearType.heading)
+        Text("Use your car's fuel type and Imperial MPG to estimate what a detour costs.",
+            style = TankBearType.body, color = TankBearTokens.colors.muted)
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
+            vm.fuelOptions().forEach { f ->
+                androidx.compose.material3.Surface(Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(TankBearTokens.radius.pill), color = TankBearTokens.colors.soft) {
+                    Column(Modifier.padding(horizontal = TankBearTokens.space.dp16)) {
+                        JourneyChoice(f.label, s.fuel == f) { vm.update { it.copy(fuel = f) } }
+                    }
+                }
+            }
         }
-        OutlinedTextField(
-            s.mpg, { v -> vm.update { it.copy(mpg = v) } }, label = { Text("Miles per Imperial gallon (MPG)") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            s.litres, { v -> vm.update { it.copy(litres = v) } }, label = { Text("Litres to buy") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(),
-        )
-        Text("Saved on this phone only. No account, no registration lookup.", style = MaterialTheme.typography.bodyMedium)
+        CarNumberField(s.mpg, "Miles per Imperial gallon (MPG)") { v -> vm.update { it.copy(mpg = v) } }
+        CarNumberField(s.litres, "Litres to buy") { v -> vm.update { it.copy(litres = v) } }
+        Text("Saved on this phone only. No account, no registration lookup.",
+            style = TankBearType.caption, color = TankBearTokens.colors.muted)
     }
+}
+
+@Composable
+private fun CarNumberField(value: String, label: String, onChange: (String) -> Unit) {
+    OutlinedTextField(value, onChange, label = { Text(label, style = TankBearType.caption) }, singleLine = true,
+        textStyle = TankBearType.body, shape = RoundedCornerShape(TankBearTokens.radius.card),
+        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = TankBearTokens.colors.surface,
+            unfocusedContainerColor = TankBearTokens.colors.surface),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp))
 }
 
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     val s = vm.saved
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("You’re in control", style = MaterialTheme.typography.headlineSmall)
-        Text("No account needed. Tank Bear will ask before using your location.", style = MaterialTheme.typography.bodyLarge)
-        Text("Connected to Tank Bear. No account or app key is needed for the friend beta.")
-        Text("Your search locations are sent to Tank Bear when you tap Find. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.")
+    Column(verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
+        Text("You’re in control", style = TankBearType.heading)
+        Text("No account needed. Tank Bear will ask before using your location.", style = TankBearType.body)
+        Text("Connected to Tank Bear. No account or app key is needed for the friend beta.", style = TankBearType.body)
+        Text("Your search locations are sent to Tank Bear when you tap Find. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.", style = TankBearType.body, color = TankBearTokens.colors.muted)
         if (BuildConfig.DEBUG) {
             var advanced by remember { mutableStateOf(false) }
             TextButton(onClick = { advanced = !advanced }) { Text("Developer connection settings") }
@@ -255,9 +310,9 @@ fun SettingsScreen(vm: AppViewModel) {
         )
             }
         }
-        Text("About the data", style = MaterialTheme.typography.titleMedium)
-        DataAttribution()
-        Text("Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.", style = MaterialTheme.typography.bodyMedium)
+        Text("About the data", style = TankBearType.heading)
+        Text(stringResource(R.string.data_attribution), style = TankBearType.caption, color = TankBearTokens.colors.muted)
+        Text("Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.", style = TankBearType.caption, color = TankBearTokens.colors.muted)
     }
 }
 
@@ -290,11 +345,11 @@ internal fun LocationButton(vm: AppViewModel) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedButton(enabled = !locating, onClick = {
+        FindPill("Use my location as the start", enabled = !locating, onClick = {
             val permissions = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             if (permissions.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) locate()
             else launcher.launch(permissions)
-        }) { Text("Use my location as the start") }
+        })
         vm.locationMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         if (blocked) {
             TextButton(onClick = {
@@ -331,26 +386,26 @@ private fun SavedPlaces(vm: AppViewModel) {
 }
 
 @Composable
-private fun NearbySection(vm: AppViewModel) {
+private fun NearbySection(vm: AppViewModel, resultsModifier: Modifier = Modifier) {
     when (val n = vm.nearby) {
         NearbyState.Idle -> Text(
             "Shows the closest stations to your start with today's price for your fuel and what filling up would cost. It compares nothing about a journey.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        NearbyState.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator()
+        NearbyState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(24.dp))
             Text("Looking for stations…")
             OutlinedButton(onClick = vm::cancel) { Text("Cancel") }
         }
-        is NearbyState.Failed -> Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        is NearbyState.Failed -> Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
             Column(Modifier.padding(16.dp)) { Text(n.failure.message, style = MaterialTheme.typography.bodyLarge) }
         }
-        is NearbyState.Done -> NearbyResults(vm, n.result, n.at)
+        is NearbyState.Done -> NearbyResults(vm, n.result, n.at, resultsModifier)
     }
 }
 
 @Composable
-private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time.Instant) {
+private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time.Instant, resultsModifier: Modifier = Modifier) {
     val stations = vm.sortedNearby(result)
     // "Cheapest here" only among stations that look available and have a price.
     val cheapest = stations.filter { it.fill != null && !it.temporaryClosure && it.opening.state != "closed" }.minByOrNull { it.fill!!.fillCostPence }
@@ -360,27 +415,30 @@ private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time
         result.feedLastSuccessfulRefresh?.let {
             Text("Prices checked ${Formatting.age(it, now)}. Each price shows when it last changed.", style = MaterialTheme.typography.bodyMedium)
         }
+        Text("Nearby distances are straight-line distances. Fill prices exclude driving costs.", style = TankBearType.caption, color = TankBearTokens.colors.muted)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NearbySort.entries.forEach { sort -> FilterChip(selected = vm.nearbySort == sort, onClick = { vm.nearbySort = sort }, label = { Text(sort.name) }) }
+            NearbySort.entries.forEach { sort -> FilterChip(modifier = Modifier.weight(1f).heightIn(min = 48.dp), selected = vm.nearbySort == sort, onClick = { vm.nearbySort = sort }, label = { Text(sort.name, Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }) }
         }
-        if (stations.isEmpty()) Text("No stations with data near that point.", style = MaterialTheme.typography.bodyLarge)
+        if (stations.isEmpty()) Text("No stations with data near this start. Choose another start on the map and search again.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
+        else Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
         stations.forEach { NearbyCard(it, it.id == cheapest?.id, now, vm) }
     }
 }
 
 @Composable
 private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Instant, vm: AppViewModel) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+        Column(Modifier.padding(TankBearTokens.space.dp16), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp12)) {
             if (cheapest) Text("Cheapest here", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(s.name, style = MaterialTheme.typography.titleMedium)
+            Text(s.name, style = TankBearType.heading)
             Text("${Formatting.metresAsMiles(s.distanceMetres)} away · ${Formatting.opening(s.opening)}")
             if (s.temporaryClosure) Text("Reported temporarily closed for three days or more.", style = MaterialTheme.typography.bodyMedium)
             s.fill?.let {
-                Text("${Formatting.pricePerLitre(it.pencePerLitre)} · price changed ${Formatting.age(it.priceLastUpdated, now)}")
+                Text(Formatting.pricePerLitre(it.pencePerLitre), style = TankBearType.price)
+                Text("Price changed ${Formatting.age(it.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
                 Text("Filling up would cost ${Formatting.pence(it.fillCostPence)}", style = MaterialTheme.typography.titleSmall)
                 Formatting.versusMedian(it.vsLocalMedianPencePerLitre)?.let { line -> Text(line, style = MaterialTheme.typography.bodyMedium) }
-                OutlinedButton(onClick = { vm.toggleHistory(s.id) }) { Text(if (vm.histories.containsKey(s.id)) "Hide history" else "Price history") }
+                FindPill(if (vm.histories.containsKey(s.id)) "Hide history" else "Price history", onClick = { vm.toggleHistory(s.id) })
                 HistoryPanel(vm, s.id, now)
             } ?: Text("No price for your fuel here.", style = MaterialTheme.typography.bodyMedium)
         }
@@ -403,7 +461,9 @@ internal fun HistoryPanel(vm: AppViewModel, stationId: String, now: java.time.In
 @Composable
 private fun HistoryBody(h: PriceHistory, now: java.time.Instant) {
     val days = h.coverage.windowDays
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+      Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Price history", style = TankBearType.heading)
         Text(
             h.trend?.let { Formatting.trendHeadline(it, days) } ?: "No $days-day trend yet",
             style = MaterialTheme.typography.titleSmall,
@@ -417,6 +477,7 @@ private fun HistoryBody(h: PriceHistory, now: java.time.Instant) {
                 (h.coverage.watchingSince?.let { Formatting.age(it, now) } ?: "never") + ".",
             style = MaterialTheme.typography.bodySmall,
         )
+      }
     }
 }
 
@@ -432,19 +493,40 @@ private fun PriceStepChart(h: PriceHistory) {
     val hi = values.max()
     val range = (hi - lo).coerceAtLeast(0.5)
     val color = MaterialTheme.colorScheme.primary
+    val axis = TankBearTokens.colors.outline
     val summary = "Price history over ${h.coverage.windowDays} days: ${pts.joinToString(", ") { "${it.pencePerLitre}p" }}"
-    Canvas(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(80.dp).semantics { contentDescription = summary }) {
-        fun x(iso: String) = (((java.time.Instant.parse(iso).toEpochMilli() - start) / (end - start)).coerceIn(0.0, 1.0) * size.width).toFloat()
-        fun y(p: String) = (size.height - ((p.toDouble() - lo) / range) * (size.height - 8f) - 4f).toFloat()
+    Canvas(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(112.dp).semantics { contentDescription = summary }) {
+        val inset = 4.dp.toPx()
+        val plotWidth = size.width - inset * 2
+        val plotHeight = size.height - inset * 2
+        fun x(iso: String) = inset + (((java.time.Instant.parse(iso).toEpochMilli() - start) / (end - start)).coerceIn(0.0, 1.0) * plotWidth).toFloat()
+        fun y(p: String) = inset + (plotHeight - ((p.toDouble() - lo) / range) * plotHeight).toFloat()
+        drawLine(axis, Offset(inset, inset), Offset(inset, size.height - inset), 1.dp.toPx())
+        drawLine(axis, Offset(inset, size.height - inset), Offset(size.width - inset, size.height - inset), 1.dp.toPx())
         val path = Path()
         pts.forEachIndexed { i, p ->
             if (i == 0) path.moveTo(x(p.at), y(p.pencePerLitre)) else { path.lineTo(x(p.at), y(pts[i - 1].pencePerLitre)); path.lineTo(x(p.at), y(p.pencePerLitre)) }
         }
-        h.currentPencePerLitre?.let { path.lineTo(size.width, y(it)) }
-        drawPath(path, color, style = Stroke(width = 5f))
-        pts.forEach { drawCircle(color, 7f, Offset(x(it.at), y(it.pencePerLitre))) }
+        h.currentPencePerLitre?.let { path.lineTo(size.width - inset, y(it)) }
+        drawPath(path, color, style = Stroke(width = 2.dp.toPx()))
+        pts.forEach { drawCircle(color, 3.dp.toPx(), Offset(x(it.at), y(it.pencePerLitre))) }
     }
     Text("Low ${Formatting.pricePerLitre(trimTrailingZero(lo))} · high ${Formatting.pricePerLitre(trimTrailingZero(hi))}", style = MaterialTheme.typography.bodySmall)
 }
 
 private fun trimTrailingZero(v: Double): String = if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()
+
+@Composable
+internal fun ResultSortPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    val width = if (LocalDensity.current.fontScale >= 1.5f) 220.dp else 128.dp
+    FilterChip(selected = selected, onClick = onClick,
+        modifier = Modifier.width(width).heightIn(min = 48.dp),
+        shape = RoundedCornerShape(TankBearTokens.radius.pill),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = TankBearTokens.colors.surface,
+            selectedContainerColor = TankBearTokens.colors.soft,
+            labelColor = TankBearTokens.colors.text,
+            selectedLabelColor = TankBearTokens.colors.text),
+        border = null,
+        label = { Text(label, Modifier.fillMaxWidth().padding(vertical = 10.dp), textAlign = TextAlign.Center, style = TankBearType.label) })
+}

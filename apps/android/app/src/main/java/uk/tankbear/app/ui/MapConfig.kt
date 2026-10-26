@@ -7,6 +7,10 @@ object MapConfig {
     // style before a public release. Check https://openfreemap.org/quick_start/ if the map comes up blank.
     const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 
+    const val DARK_STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
+
+    fun styleUrl(dark: Boolean) = if (dark) DARK_STYLE_URL else STYLE_URL
+
     const val INITIAL_LAT = 54.0
     const val INITIAL_LON = -2.5
     const val INITIAL_ZOOM = 5.0
