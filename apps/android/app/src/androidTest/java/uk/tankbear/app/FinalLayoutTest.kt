@@ -42,12 +42,13 @@ class FinalLayoutTest {
                 compose.runOnIdle { dark.value = night }
                 compose.onNodeWithText("Find").performClick()
                 compose.onNodeWithText("Find the best stop").assertIsDisplayed()
+                compose.onNodeWithTag("choose-start").performScrollTo().performClick()
                 compose.onNodeWithText("Choose start on map").performScrollTo().performClick()
-                compose.onNodeWithText("Use this location").performScrollTo().assertIsDisplayed()
-                compose.onNodeWithText("Cancel").performScrollTo().performClick()
-                compose.onNodeWithText("Find the best stop").assertIsDisplayed()
+                compose.onNodeWithText("Use this start").performScrollTo().assertIsDisplayed()
                 val bounds = compose.onNodeWithTag("route-map").fetchSemanticsNode().boundsInRoot
                 assertTrue("Map must retain usable area", bounds.width > 100 && bounds.height > 100)
+                compose.onNodeWithText("Cancel").performScrollTo().performClick()
+                compose.onNodeWithText("Find the best stop").assertIsDisplayed()
             }
         } finally {
             compose.runOnUiThread { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }

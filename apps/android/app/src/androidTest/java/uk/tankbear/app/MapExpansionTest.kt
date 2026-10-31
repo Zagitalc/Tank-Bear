@@ -40,10 +40,14 @@ class MapExpansionTest {
     }
 
     @Test fun expandChooseCancelConfirmAndThemeReloadPreserveMap() {
+        compose.runOnUiThread { compose.activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
         val vm = ViewModelProvider(compose.activity)[AppViewModel::class.java]
         compose.waitUntil(10_000) { vm.loaded }
         val dark = mutableStateOf(false)
-        compose.runOnIdle { vm.useExample() }
+        compose.runOnIdle {
+            vm.mapNearbyLookup = { _, _, _, _, _ -> uk.tankbear.app.data.ApiOutcome.NearbyOk(uk.tankbear.app.data.NearbyResult(null, emptyList())) }
+            vm.useExample()
+        }
         compose.runOnUiThread {
             compose.activity.setContent {
                 val config = Configuration(LocalConfiguration.current)

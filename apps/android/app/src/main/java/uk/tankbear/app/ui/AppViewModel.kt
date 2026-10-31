@@ -80,6 +80,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var originLon by mutableStateOf("")
     var destLat by mutableStateOf("")
     var destLon by mutableStateOf("")
+    private var startDescription by mutableStateOf<Pair<LatLon, String>?>(null)
+    private var destinationDescription by mutableStateOf<Pair<LatLon, String>?>(null)
+    fun locationDescription(target: MapTarget): String {
+        val point = if (target == MapTarget.Start) Validation.point(originLat, originLon) else Validation.point(destLat, destLon)
+        if (point == null) return "Not set"
+        val description = if (target == MapTarget.Start) startDescription else destinationDescription
+        return description?.takeIf { it.first == point }?.second ?: "Location selected"
+    }
+    private fun describeLocation(target: MapTarget, label: String) {
+        val point = if (target == MapTarget.Start) Validation.point(originLat, originLon) else Validation.point(destLat, destLon)
+        if (point != null) {
+            if (target == MapTarget.Start) startDescription = point to label else destinationDescription = point to label
+        }
+    }
     private var errorMessage by mutableStateOf<String?>(null)
     private var errorInputs by mutableStateOf<SearchInputs?>(null)
     var formError: String?
@@ -90,6 +104,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var search by mutableStateOf<SearchState>(SearchState.Idle)
         private set
     private var job: Job? = null
+    internal var journeyLookup: suspend (String, String, JourneyRequest) -> ApiOutcome = { url, appKey, request ->
+        OptimiseClient(url, appKey).optimise(request)
+    }
 
     /** History panels the person has opened, by station id. Held in memory only. */
     val histories = mutableStateMapOf<String, HistoryState>()
@@ -102,6 +119,66 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 is ApiOutcome.HistoryOk -> HistoryState.Done(o.history)
                 is ApiOutcome.Failure -> HistoryState.Failed(o.message)
                 else -> HistoryState.Failed("Couldn't load history.")
+            }
+        }
+    }
+
+    // The map's nearby lookup is independent of Find's selected mode and jobs.
+    var mapJourney by mutableStateOf(false)
+    var mapNearbyOpenOnly by mutableStateOf(false)
+    var mapNearbySort by mutableStateOf(NearbySort.Closest)
+    var mapNearby by mutableStateOf<NearbyState>(NearbyState.Idle)
+        private set
+    var mapSelectedStationId by mutableStateOf<String?>(null)
+        private set
+    private var mapJob: Job? = null
+    private var mapGeneration = 0
+    private var mapRequestKey: SearchInputs? = null
+    private var mapConnection: Pair<String, String>? = null
+    private var mapRetryAfter = java.time.Instant.EPOCH
+    internal var mapNow: () -> java.time.Instant = { java.time.Instant.now() }
+    internal var mapNearbyLookup: suspend (String, String, LatLon, FuelType, String) -> ApiOutcome = { url, appKey, origin, fuel, litres ->
+        OptimiseClient(url, appKey).nearby(origin, fuel, litres)
+    }
+    val mapRetryAvailable: Boolean get() = !mapNow().isBefore(mapRetryAfter)
+    val mapInputs: SearchInputs get() = searchInputs(Mode.Nearby, Validation.point(originLat, originLon), null, saved)
+    val currentMapNearby: NearbyState get() {
+        val done = mapNearby as? NearbyState.Done
+        return if (done != null && (done.inputs != mapInputs || mapConnection != (saved.baseUrl to saved.appKey))) NearbyState.Idle else mapNearby
+    }
+    fun selectMapStation(id: String) { if (mapJourney) selectStation(id) else mapSelectedStationId = id }
+    fun loadMapNearby(force: Boolean = false) {
+        if (!loaded || mapJourney || choosingMapLocation) return
+        val key = mapInputs
+        val origin = key.origin ?: run { mapGeneration++; mapJob?.cancel(); mapNearby = NearbyState.Idle; return }
+        val litres = Validation.litres(saved.litres) ?: run { mapGeneration++; mapJob?.cancel(); mapNearby = NearbyState.Idle; return }
+        val connection = saved.baseUrl to saved.appKey
+        val existing = mapNearby as? NearbyState.Done
+        if (!force && existing != null && existing.inputs == key && mapConnection == connection &&
+            java.time.Duration.between(existing.at, mapNow()).seconds in 0 until 300) return
+        if (mapNearby is NearbyState.Loading && mapRequestKey == key && mapConnection == connection) return
+        if (!mapRetryAvailable) return
+        mapJob?.cancel()
+        val generation = ++mapGeneration
+        mapRequestKey = key
+        mapConnection = connection
+        mapNearby = NearbyState.Loading
+        mapJob = viewModelScope.launch {
+            val outcome = mapNearbyLookup(connection.first, connection.second, origin, key.fuel, litres)
+            if (generation != mapGeneration || key != mapInputs || connection != (saved.baseUrl to saved.appKey)) return@launch
+            mapNearby = when (outcome) {
+                is ApiOutcome.NearbyOk -> {
+                    mapSelectedStationId = (outcome.result.stations.firstOrNull { !it.temporaryClosure && it.opening.state != "closed" && it.fill != null }
+                        ?: outcome.result.stations.firstOrNull { !it.temporaryClosure && it.fill != null }
+                        ?: outcome.result.stations.firstOrNull())?.id
+                    fitCount++
+                    NearbyState.Done(outcome.result, mapNow(), key)
+                }
+                is ApiOutcome.Failure -> {
+                    mapRetryAfter = mapNow().plusSeconds((outcome.retryAfterSeconds ?: 0).toLong())
+                    NearbyState.Failed(outcome)
+                }
+                else -> NearbyState.Idle
             }
         }
     }
@@ -128,7 +205,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var choosingMapLocation by mutableStateOf(false)
     var placePreview by mutableStateOf<LatLon?>(null)
         private set
-    fun beginMapChoice(target: MapTarget, preview: LatLon? = null) {
+    private var placePreviewLabel: String? = null
+    fun beginMapChoice(target: MapTarget, preview: LatLon? = null, label: String? = null) {
+        placePreviewLabel = label
         placePreview = preview
         mapTarget = target
         choosingMapLocation = true
@@ -154,6 +233,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val lat = "%.5f".format(java.util.Locale.UK, point.lat)
         val lon = "%.5f".format(java.util.Locale.UK, point.lon)
         if (mapTarget == MapTarget.Start || mode != Mode.AlongJourney) { originLat = lat; originLon = lon } else { destLat = lat; destLon = lon }
+        val actualTarget = if (mapTarget == MapTarget.Start || mode != Mode.AlongJourney) MapTarget.Start else MapTarget.Destination
+        val preview = placePreview
+        val unchangedPreview = preview != null &&
+            "%.5f".format(java.util.Locale.UK, preview.lat) == lat && "%.5f".format(java.util.Locale.UK, preview.lon) == lon
+        describeLocation(actualTarget, placePreviewLabel?.takeIf { unchangedPreview } ?: "Selected on map")
     }
 
     fun selectStation(id: String) { selectedStationId = id }
@@ -175,12 +259,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun useExample() {
         originLat = "51.4543"; originLon = "-0.9781"
         destLat = "51.7520"; destLon = "-1.2577"
+        describeLocation(MapTarget.Start, "Reading (example)")
+        describeLocation(MapTarget.Destination, "Oxford (example)")
     }
 
     fun useLocation(point: LatLon) {
         originLat = "%.5f".format(java.util.Locale.UK, point.lat)
         originLon = "%.5f".format(java.util.Locale.UK, point.lon)
         locationMessage = null
+        describeLocation(MapTarget.Start, "Current location")
     }
 
     fun savePlace(name: String, forDestination: Boolean) {
@@ -201,9 +288,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val lat = "%.5f".format(java.util.Locale.UK, place.point.lat)
         val lon = "%.5f".format(java.util.Locale.UK, place.point.lon)
         if (asDestination) { destLat = lat; destLon = lon } else { originLat = lat; originLon = lon }
+        describeLocation(if (asDestination) MapTarget.Destination else MapTarget.Start, place.name)
     }
 
     fun sortedNearby(result: NearbyResult) = when (nearbySort) {
+        NearbySort.Closest -> result.stations
+        NearbySort.Cheapest -> result.stations.sortedWith(compareBy({ it.fill == null }, { it.fill?.fillCostPence ?: Long.MAX_VALUE }, { it.distanceMetres }))
+    }
+
+    fun sortedMapNearby(result: NearbyResult) = when (mapNearbySort) {
         NearbySort.Closest -> result.stations
         NearbySort.Cheapest -> result.stations.sortedWith(compareBy({ it.fill == null }, { it.fill?.fillCostPence ?: Long.MAX_VALUE }, { it.distanceMetres }))
     }
@@ -247,7 +340,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         histories.clear()
         search = SearchState.Loading
         job = viewModelScope.launch {
-            search = when (val outcome = OptimiseClient(connection.baseUrl, connection.appKey).optimise(request)) {
+            search = when (val outcome = journeyLookup(connection.baseUrl, connection.appKey, request)) {
                 is ApiOutcome.Ok -> {
                     selectedStationId = outcome.result.candidates.firstOrNull()?.stationId
                     fitCount++

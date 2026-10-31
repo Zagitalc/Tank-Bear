@@ -57,6 +57,8 @@ import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
@@ -113,23 +115,23 @@ fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
             JourneyChoice("Nearby stations (no journey)", vm.mode == Mode.Nearby) { vm.mode = Mode.Nearby }
         }
         }
-        LocationSummary("Start", Validation.point(vm.originLat, vm.originLon) != null)
-        FindPill("Choose start on map", onClick = { vm.beginMapChoice(MapTarget.Start); onShowOnMap() })
-        LocationButton(vm)
-        PlaceSearch(vm, MapTarget.Start, onShowOnMap)
-        if (vm.mode == Mode.AlongJourney) {
-            PlaceSearch(vm, MapTarget.Destination, onShowOnMap)
-            LocationSummary("Destination", Validation.point(vm.destLat, vm.destLon) != null)
-            FindPill("Choose destination on map", onClick = { vm.beginMapChoice(MapTarget.Destination); onShowOnMap() })
+        var choosingLocation by rememberSaveable { mutableStateOf<MapTarget?>(null) }
+        FindLocationRow(vm, MapTarget.Start) { choosingLocation = MapTarget.Start }
+        if (vm.mode == Mode.AlongJourney) FindLocationRow(vm, MapTarget.Destination) { choosingLocation = MapTarget.Destination }
+        choosingLocation?.let { target ->
+            FindLocationPicker(vm, target, onDismiss = { choosingLocation = null }, onShowOnMap = onShowOnMap)
         }
-        var coordinatesExpanded by rememberSaveable { mutableStateOf(false) }
-        TextButton(onClick = { coordinatesExpanded = !coordinatesExpanded }) { Text(if (coordinatesExpanded) "Hide coordinates" else "Enter coordinates (optional)") }
-        if (coordinatesExpanded) {
+        var managePlaces by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { managePlaces = !managePlaces }) { Text(if (managePlaces) "Hide saved places" else "Manage saved places") }
+        if (managePlaces) SavedPlaces(vm)
+        var moreOptions by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { moreOptions = !moreOptions }) { Text(if (moreOptions) "Fewer options" else "More options") }
+        if (moreOptions) {
+            Text("Coordinates (optional)", style = MaterialTheme.typography.titleMedium)
             CoordinateRow(vm.originLat, vm.originLon, { vm.originLat = it }, { vm.originLon = it }, "Start")
             if (vm.mode == Mode.AlongJourney) CoordinateRow(vm.destLat, vm.destLon, { vm.destLat = it }, { vm.destLon = it }, "Destination")
+            FindPill("Fill in an example (Reading to Oxford)", onClick = vm::useExample)
         }
-        SavedPlaces(vm)
-        FindPill("Fill in an example (Reading to Oxford)", onClick = vm::useExample)
         if (vm.resultsOutdated) {
             Text("Previous results are outdated. Update results for your new locations or car settings.")
             return@Column
@@ -289,7 +291,7 @@ fun SettingsScreen(vm: AppViewModel) {
         Text("You’re in control", style = TankBearType.heading)
         Text("No account needed. Tank Bear will ask before using your location.", style = TankBearType.body)
         Text("Connected to Tank Bear. No account or app key is needed for the friend beta.", style = TankBearType.body)
-        Text("Your search locations are sent to Tank Bear when you tap Find. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.", style = TankBearType.body, color = TankBearTokens.colors.muted)
+        Text("Your search locations are sent to Tank Bear when you tap Find. Opening Map with a selected start also sends it to load nearby prices. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.", style = TankBearType.body, color = TankBearTokens.colors.muted)
         if (BuildConfig.DEBUG) {
             var advanced by remember { mutableStateOf(false) }
             TextButton(onClick = { advanced = !advanced }) { Text("Developer connection settings") }
@@ -318,18 +320,22 @@ fun SettingsScreen(vm: AppViewModel) {
 
 
 @Composable
-internal fun LocationButton(vm: AppViewModel) {
+internal fun LocationButton(vm: AppViewModel, onLocationChosen: () -> Unit = {}) {
     val context = LocalContext.current
     var blocked by remember { mutableStateOf(false) }
     var locating by remember { mutableStateOf(false) }
+    var active by remember { mutableStateOf(true) }
+    val locationChosen by rememberUpdatedState(onLocationChosen)
+    DisposableEffect(Unit) { onDispose { active = false } }
 
     fun locate() {
         locating = true
         vm.locationMessage = "Finding your location…"
         LocationFetcher.getOnce(context) { result ->
+            if (!active) return@getOnce
             locating = false
             when (result) {
-                is LocationFetcher.Result.Found -> { blocked = false; vm.useLocation(result.point) }
+                is LocationFetcher.Result.Found -> { blocked = false; vm.useLocation(result.point); locationChosen() }
                 LocationFetcher.Result.Unavailable -> vm.locationMessage = "Location is switched off in your phone's settings. Turn it on, or choose a point on the map."
                 LocationFetcher.Result.NoFix -> vm.locationMessage = "Couldn't get a location fix. Try again, or choose a point on the map."
             }

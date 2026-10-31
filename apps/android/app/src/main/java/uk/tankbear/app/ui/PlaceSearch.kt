@@ -41,7 +41,7 @@ internal fun PlaceSearch(vm: AppViewModel, target: MapTarget, onShowOnMap: () ->
                 } finally { if (generation == revision) loading = false }
             }
         }, onChoose = { place ->
-            vm.beginMapChoice(target, place.point)
+            vm.beginMapChoice(target, place.point, place.label)
             onShowOnMap()
         }, onAttribution = { uri.openUri(it) })
 }

@@ -9,7 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.CardDefaults
 import uk.tankbear.app.ui.theme.TankBearTokens
@@ -58,6 +59,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.SymbolLayer
@@ -125,13 +127,16 @@ private fun lineOf(points: List<LatLon>): FeatureCollection =
  * the info panel, not behind it, so the attribution MapLibre draws stays visible (the map data licence needs it).
  */
 @Composable
-fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: () -> Unit = {}) {
+fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: () -> Unit = {}, onCar: () -> Unit = {}) {
     val dark = isSystemInDarkTheme()
     val mapColors = TankBearTokens.colors
     val fontScale = LocalDensity.current.fontScale
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val mapView = remember { MapView(context) }
+    val mapView = remember {
+        // A TextureView follows Compose clipping and bounds in the same view hierarchy.
+        MapView(context, MapLibreMapOptions.createFromAttributes(context).textureMode(true))
+    }
     var camera by rememberSaveable(stateSaver = CameraSaver) { mutableStateOf<CameraPosition?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
@@ -183,7 +188,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
                 val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(p), STATION_LAYER, SELECTED_LAYER).firstOrNull()
                 val id = hit?.getStringProperty(ID)
                 if (id != null) {
-                    vm.selectStation(id)
+                    vm.selectMapStation(id)
                 } else if (!vm.mapExpanded) {
                     vm.mapExpanded = true
                 } else {
@@ -244,17 +249,21 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
         onDispose { active = false }
     }
 
-    val nearby = if (!vm.resultsOutdated && vm.mode == Mode.Nearby) (vm.nearby as? NearbyState.Done)?.result else null
-    val result = if (!vm.resultsOutdated && vm.mode != Mode.Nearby) vm.result else null
+    LaunchedEffect(vm.loaded, vm.mapJourney, vm.mapInputs, vm.saved.baseUrl, vm.saved.appKey, vm.choosingMapLocation) {
+        vm.loadMapNearby()
+    }
+    val nearby = if (!vm.mapJourney) (vm.currentMapNearby as? NearbyState.Done)?.result else null
+    val result = if (vm.mapJourney && !vm.resultsOutdated) vm.result else null
+    val selectedId = if (vm.mapJourney) vm.selectedStationId else vm.mapSelectedStationId
     val visibleCandidates = result?.candidates.orEmpty().filter { !vm.mapOpenOnly || it.opening.state == "open" }
-    val visibleNearby = nearby?.stations.orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
-    val selected = visibleCandidates.firstOrNull { it.stationId == vm.selectedStationId }
+    val visibleNearby = nearby?.stations.orEmpty().filter { !vm.mapNearbyOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
+    val selected = visibleCandidates.firstOrNull { it.stationId == selectedId }
     // Keep the comparison stable when sorting or applying Open now; all prices are
     // for the searched grade, never prices for another fuel or inferred brands.
     val priceMedian = if (nearby != null) MapPrices.price(nearby.localMedianPencePerLitre)
         else MapPrices.median(result?.candidates.orEmpty().map { it.pencePerLitre })
     val origin = Validation.point(vm.originLat, vm.originLon)
-    val destination = if (vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
+    val destination = if (vm.mapJourney && vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
 
     LaunchedEffect(map, vm.placePreview) {
         if (map == null) return@LaunchedEffect
@@ -265,6 +274,18 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
             }
             val target = vm.placePreview ?: (if (vm.mapTarget == MapTarget.Destination) destination ?: origin else origin)
             target?.let { map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(it.lat, it.lon), 14.0)) }
+        }
+    }
+
+    LaunchedEffect(map, origin, vm.mapJourney) {
+        if (!vm.mapJourney && !vm.choosingMapLocation && origin != null && nearby == null) {
+            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(origin.lat, origin.lon), 14.0))
+        }
+    }
+
+    LaunchedEffect(visibleNearby, vm.mapNearbyOpenOnly, vm.mapJourney) {
+        if (!vm.mapJourney && vm.mapNearbyOpenOnly && visibleNearby.none { it.id == vm.mapSelectedStationId }) {
+            visibleNearby.firstOrNull()?.let { vm.selectMapStation(it.id) }
         }
     }
 
@@ -279,7 +300,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.selectedStationId, fitRequest, fontScale, dark, mapColors) {
+    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.mapNearbyOpenOnly, selectedId, fitRequest, fontScale, dark, mapColors) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()
@@ -295,7 +316,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
             visibleNearby.map { it.id to it.position }).mapIndexed { index, (id, position) ->
             val value = prices[id]
             val band = MapPrices.band(value, priceMedian)
-            val chosen = id == vm.selectedStationId
+            val chosen = id == selectedId
             val fill = when (band) {
                 PumpPriceBand.Below -> mapColors.pumpBelow
                 PumpPriceBand.Around -> mapColors.pumpAround
@@ -344,64 +365,78 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
     BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         val landscape = maxWidth > maxHeight
         val expanded = vm.mapExpanded
-        val largeText = fontScale >= 1.5f
-        var panelHeight by remember { mutableStateOf(0.dp) }
-        val density = LocalDensity.current
-        val mapWidth = if (landscape && !expanded) (maxWidth - 16.dp) / 2 else maxWidth
-        val mapHeight = if (landscape && !expanded) maxHeight
-            else (maxHeight - panelHeight - 8.dp).coerceAtLeast(80.dp)
-
-        // Keep this host at the same composition position when expanding or rotating.
-        Box(Modifier.width(mapWidth).height(mapHeight).clip(RoundedCornerShape(TankBearTokens.radius.card))) {
-            AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().testTag("route-map"))
-            if (vm.choosingMapLocation) {
-                Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
-                    contentDescription = "Selected location at map centre",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.Center).size(36.dp))
+        // Measure the footer first, then give the map exactly the remaining space
+        // in this layout pass. No intermediate frame uses a stale footer height.
+        Layout(modifier = Modifier.fillMaxSize(), content = {
+            Box(Modifier.clip(RoundedCornerShape(TankBearTokens.radius.card))) {
+                AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().testTag("route-map"))
+                if (vm.choosingMapLocation) {
+                    Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
+                        contentDescription = "Selected location at map centre",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center).size(36.dp))
+                }
+                FilledIconButton(onClick = { if (expanded) closeExpanded() else vm.mapExpanded = true },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(48.dp)) {
+                    Icon(painterResource(if (expanded) R.drawable.ic_close_fullscreen else R.drawable.ic_fullscreen),
+                        contentDescription = if (expanded) "Close expanded map" else "Expand map")
+                }
             }
-            FilledIconButton(onClick = { if (expanded) closeExpanded() else vm.mapExpanded = true },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(48.dp)) {
-                Icon(painterResource(if (expanded) R.drawable.ic_close_fullscreen else R.drawable.ic_fullscreen),
-                    contentDescription = if (expanded) "Close expanded map" else "Expand map")
-            }
-        }
-        Column(
-            Modifier.align(Alignment.BottomEnd)
-                .width(if (landscape && !expanded) (maxWidth - 16.dp) / 2 else maxWidth)
-                .then(if (expanded) Modifier.heightIn(max = maxHeight * 0.45f)
-                    else if (landscape) Modifier.fillMaxHeight() else Modifier.height(maxHeight * 0.56f))
-                .onSizeChanged { panelHeight = with(density) { it.height.toDp() } },
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (expanded) {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (vm.choosingMapLocation) {
-                        Text("Tap a point or move the map to choose your ${vm.mapTarget.name.lowercase()}.")
-                        vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        FindPill("Use this ${vm.mapTarget.name.lowercase()}", enabled = styleReady, onClick = {
-                            map?.cameraPosition?.target?.let {
-                                vm.setFromMap(LatLon(it.latitude, it.longitude))
-                                if (!vm.choosingMapLocation) closeExpanded()
-                            }
-                        })
-                        FindPill("Cancel", onClick = { closeExpanded() })
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (expanded) {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (vm.choosingMapLocation) {
+                            Text("Tap a point or move the map to choose your ${vm.mapTarget.name.lowercase()}.")
+                            vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            FindPill("Use this ${vm.mapTarget.name.lowercase()}", enabled = styleReady, onClick = {
+                                map?.cameraPosition?.target?.let {
+                                    vm.setFromMap(LatLon(it.latitude, it.longitude))
+                                    if (!vm.choosingMapLocation) closeExpanded()
+                                }
+                            })
+                            FindPill("Cancel", onClick = { closeExpanded() })
+                        } else {
+                            Text("Tap a point to choose your start. Tap a price for station details.")
+                            // Selection details remain available while viewing the large map.
+                            val stationName = selected?.name ?: visibleNearby.firstOrNull { it.id == selectedId }?.name
+                            stationName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                            val price = selected?.pencePerLitre ?: visibleNearby.firstOrNull { it.id == selectedId }?.fill?.pencePerLitre
+                            price?.let { Text("${MapPrices.label(it)}/L", style = MaterialTheme.typography.titleLarge) }
+                        }
+                    }
+                } else {
+                    if (vm.mapJourney) {
+                        Row {
+                            TextButton(onClick = onReturnToFind) { Text("Back to Find") }
+                            TextButton(onClick = { fitRequest++ }) { Text("Fit route") }
+                        }
+                        MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
                     } else {
-                        Text("Tap a point to choose your start. Tap a price for station details.")
-                        // Selection details remain available while viewing the large map.
-                        val stationName = selected?.name ?: visibleNearby.firstOrNull { it.id == vm.selectedStationId }?.name
-                        stationName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
-                        val price = selected?.pencePerLitre ?: visibleNearby.firstOrNull { it.id == vm.selectedStationId }?.fill?.pencePerLitre
-                        price?.let { Text("${MapPrices.label(it)}/L", style = MaterialTheme.typography.titleLarge) }
+                        NearbyMapPanel(vm, nearby, onCar = onCar)
                     }
                 }
-            } else {
-                MapLocationControls(vm, map != null, largeText,
-                    onConfirm = { map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) } })
-                TextButton(onClick = { fitRequest++ }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (nearby != null) "Fit stations" else "Fit route")
-                }
-                MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
+            }
+        }) { measurables, constraints ->
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val sideBySide = landscape && !expanded
+            val gap = (if (sideBySide) 16.dp else 8.dp).roundToPx()
+            val panelWidth = if (sideBySide) ((width - gap) / 2).coerceAtLeast(1) else width
+            val panelMaxHeight = if (expanded) (height * 0.45f).toInt() else if (sideBySide) height
+                else (height * (if (vm.mapJourney) 0.56f else if (fontScale >= 1.5f) 0.5f else 0.36f)).toInt()
+            val panel = measurables[1].measure(Constraints(
+                minWidth = panelWidth, maxWidth = panelWidth,
+                minHeight = if (expanded || !vm.mapJourney) 0 else panelMaxHeight, maxHeight = panelMaxHeight,
+            ))
+            val mapWidth = if (sideBySide) (width - panelWidth - gap).coerceAtLeast(1) else width
+            val mapHeight = if (sideBySide) height else (height - panel.height - gap).coerceAtLeast(1)
+            val mapPlaceable = measurables[0].measure(Constraints.fixed(mapWidth, mapHeight))
+            layout(width, height) {
+                mapPlaceable.place(0, 0)
+                panel.place(width - panelWidth, height - panel.height)
             }
         }
     }

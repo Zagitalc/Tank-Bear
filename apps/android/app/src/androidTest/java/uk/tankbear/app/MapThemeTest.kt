@@ -58,6 +58,7 @@ class MapThemeTest {
         compose.runOnIdle {
             vm.update { it.copy(mpg = "40", litres = "30", fuel = uk.tankbear.app.data.FuelType.E10) }
             vm.useExample()
+            vm.mapJourney = true
             vm.submit()
         }
         compose.waitUntil(60_000) { !vm.loading }

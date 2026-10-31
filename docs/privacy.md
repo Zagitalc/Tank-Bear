@@ -42,3 +42,11 @@ Location is requested only when the person taps "Use my location", approximate i
 shown as the start. It is not stored or tracked, and there is no background location. Saved places are stored only on
 the phone and are excluded from backup. A search sends the coordinates being searched to the Tank Bear server; the server
 does not store them (no request logging of coordinates, caches are in memory).
+
+
+## Map nearby lookups
+
+Opening Map with a selected start automatically sends that start, selected fuel
+and fill amount to the Tank Bear server to look up nearby prices. Changing these
+inputs can trigger another lookup. Map movement alone does not trigger a search.
+The start remains in memory for the current session unless explicitly saved.

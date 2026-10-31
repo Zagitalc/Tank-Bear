@@ -52,14 +52,14 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
         Scaffold(
             bottomBar = {
                 if (!vm.mapExpanded || selected != Destination.Map) Column {
-                  if (selected == Destination.Find || selected == Destination.Map) SearchActionBar(vm, fromFind = selected == Destination.Find,
+                  if (selected == Destination.Find) SearchActionBar(vm, fromFind = selected == Destination.Find,
                       onChoose = { target -> vm.mapChoiceReturnsToFind = selected == Destination.Find; vm.beginMapChoice(target); selected = Destination.Map },
                       onCar = { selected = Destination.Car })
                   NavigationBar {
                     Destination.entries.forEach { destination ->
                         NavigationBarItem(
                             selected = selected == destination,
-                            onClick = { selected = destination; if (destination != Destination.Map) vm.choosingMapLocation = false },
+                            onClick = { selected = destination; if (destination == Destination.Map) { vm.mapJourney = false; vm.mapNearbyOpenOnly = false } else vm.choosingMapLocation = false },
                             icon = { Icon(painterResource(destination.icon), contentDescription = null) },
                             label = { Text(stringResource(destination.label)) },
                         )
@@ -69,7 +69,7 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
             },
         ) { padding ->
             if (selected == Destination.Map) {
-                MapScreen(vm, Modifier.padding(padding), onReturnToFind = { selected = Destination.Find })
+                MapScreen(vm, Modifier.padding(padding), onReturnToFind = { selected = Destination.Find }, onCar = { selected = Destination.Car })
             } else {
                 Column(
                     modifier = Modifier
@@ -83,6 +83,7 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                     when (selected) {
                         Destination.Find -> FindScreen(vm, onShowOnMap = {
                             vm.mapChoiceReturnsToFind = vm.choosingMapLocation
+                            vm.mapJourney = !vm.choosingMapLocation && vm.mode != uk.tankbear.app.data.Mode.Nearby
                             selected = Destination.Map
                         })
                         Destination.Car -> {
