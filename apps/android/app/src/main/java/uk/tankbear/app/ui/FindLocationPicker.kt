@@ -7,9 +7,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uk.tankbear.app.data.Validation
@@ -35,8 +38,11 @@ internal fun FindLocationRow(vm: AppViewModel, target: MapTarget, onChoose: () -
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FindLocationPicker(vm: AppViewModel, target: MapTarget, onDismiss: () -> Unit, onShowOnMap: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(target) { focus.clearFocus(force = true); keyboard?.hide() }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Choose your ${target.name.lowercase()}", style = MaterialTheme.typography.headlineSmall)
             Text(vm.locationDescription(target), style = MaterialTheme.typography.bodyMedium, color = TankBearTokens.colors.muted)

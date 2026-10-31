@@ -110,6 +110,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     internal var nearbyLookup: suspend (String, String, LatLon, FuelType, String) -> ApiOutcome = { url, appKey, point, fuel, litres ->
         OptimiseClient(url, appKey).nearby(point, fuel, litres)
     }
+    internal var placeLookup: suspend (String, String, String) -> uk.tankbear.app.data.PlaceSearchResult = { url, appKey, query ->
+        uk.tankbear.app.data.GeocodingClient(url, appKey).search(query)
+    }
+    val findResultCount: Int? get() = if (resultsOutdated) null else if (mode == Mode.Nearby)
+        (nearby as? NearbyState.Done)?.result?.stations?.size
+        else (search as? SearchState.Done)?.outcome?.result?.candidates?.size
+    fun revealFindResults() { if (findResultCount != null) findResultsVersion++ }
 
     /** History panels the person has opened, by station id. Held in memory only. */
     val histories = mutableStateMapOf<String, HistoryState>()
@@ -213,6 +220,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var nearbySort by mutableStateOf(NearbySort.Closest)
     var routeSort by mutableStateOf(RouteSort.Total)
+        private set
+    var routeSelectionVersion by mutableStateOf(0)
+        private set
+    fun chooseRouteSort(sort: RouteSort, fromFind: Boolean = false) {
+        routeSort = sort
+        if (resultsOutdated) return
+        val first = orderedCandidates(result?.candidates.orEmpty(), sort)
+            .firstOrNull { !mapOpenOnly || it.opening.state == "open" }
+        selectedStationId = first?.stationId
+        routeSelectionVersion++ // Re-tapping an active sort must reveal its first result too.
+        if (first != null) fitCount++
+        if (fromFind) revealFindResults()
+    }
     var mapOpenOnly by mutableStateOf(false)
     var locationMessage by mutableStateOf<String?>(null)
     var placeMessage by mutableStateOf<String?>(null)
@@ -393,7 +413,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             search = when (val outcome = journeyLookup(connection.baseUrl, connection.appKey, request)) {
                 is ApiOutcome.Ok -> {
-                    selectedStationId = outcome.result.candidates.firstOrNull()?.stationId
+                    selectedStationId = orderedCandidates(outcome.result.candidates, routeSort)
+                        .firstOrNull { !mapOpenOnly || it.opening.state == "open" }?.stationId
                     fitCount++
                     if (fromFind && submittedInputs == inputs) findResultsVersion++
                     SearchState.Done(outcome, java.time.Instant.now(), submittedInputs)

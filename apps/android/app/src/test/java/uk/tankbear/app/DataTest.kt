@@ -24,6 +24,16 @@ import uk.tankbear.app.data.Validation
 class DataTest {
     private val sample = javaClass.classLoader!!.getResource("optimise-response-sample.json")!!.readText()
 
+    @Test fun typedPlaceQueriesNormaliseFullPostcodesWithoutChangingPlaceNames() {
+        fun normalise(value: String) = uk.tankbear.app.data.normalisePlaceQuery(value)
+        assertEquals("SW1A 1AA", normalise(" sw1a1aa "))
+        assertEquals("SW1A 1AA", normalise("sw1a\u00a0  1aa"))
+        assertEquals("GIR 0AA", normalise("gir0aa"))
+        assertEquals("Oxford station", normalise(" Oxford   station "))
+        assertEquals("RG2", normalise("RG2"))
+        assertEquals("", normalise("  "))
+    }
+
     @Test fun changedSearchInputsInvalidateOnlyRelevantResults() {
         val start = LatLon(51.45, -0.97)
         val end = LatLon(51.75, -1.25)
@@ -52,6 +62,16 @@ class DataTest {
         assertEquals(listOf(second, tied, first), uk.tankbear.app.ui.orderedCandidates(input, uk.tankbear.app.ui.RouteSort.Pump))
         assertEquals(listOf(second, tied, first), uk.tankbear.app.ui.orderedCandidates(input, uk.tankbear.app.ui.RouteSort.Detour))
         assertEquals(listOf(tied, first, second), input)
+    }
+
+    @Test fun leastDrivingTiesFollowBackendDistanceThenStationIdInsteadOfTotalRank() {
+        val base = ResultParser.parse(sample).candidates.first()
+        val farther = base.copy(stationId = "a", rank = 1, detourDurationSeconds = "20", detourDistanceMetres = "900")
+        val closer = base.copy(stationId = "z", rank = 2, detourDurationSeconds = "20.0", detourDistanceMetres = "100")
+        val idTie = base.copy(stationId = "b", rank = 3, detourDurationSeconds = "20", detourDistanceMetres = "100.0")
+        assertEquals(listOf(idTie, closer, farther), uk.tankbear.app.ui.orderedCandidates(listOf(farther, closer, idTie), uk.tankbear.app.ui.RouteSort.Detour))
+        assertEquals(3, idTie.rank)
+        assertEquals(base.comparisonCostPence, idTie.comparisonCostPence)
     }
 
     @Test fun parsesTheSharedBackendFixture() {

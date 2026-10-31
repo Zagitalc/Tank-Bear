@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import uk.tankbear.app.data.*
 
@@ -21,7 +22,8 @@ enum class RouteSort(val label: String) { Total("Best total"), Pump("Pump price"
 internal fun orderedCandidates(candidates: List<Candidate>, sort: RouteSort): List<Candidate> = when (sort) {
     RouteSort.Total -> candidates.sortedBy { it.rank }
     RouteSort.Pump -> candidates.sortedWith(compareBy<Candidate> { it.pencePerLitre.toBigDecimal() }.thenBy { it.rank })
-    RouteSort.Detour -> candidates.sortedWith(compareBy<Candidate> { it.detourDurationSeconds.toBigDecimal() }.thenBy { it.rank })
+    RouteSort.Detour -> candidates.sortedWith(compareBy<Candidate> { it.detourDurationSeconds.toBigDecimal() }
+        .thenBy { it.detourDistanceMetres.toBigDecimal() }.thenBy { it.stationId })
 }
 
 @Composable
@@ -42,7 +44,7 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
     val stations = nearby?.let(vm::sortedNearby).orEmpty().filter { !vm.mapOpenOnly || (!it.temporaryClosure && it.opening.state == "open") }
     val ids = if (nearbyMode) stations.map { it.id } else candidates.map { it.stationId }
     val listState = rememberLazyListState()
-    LaunchedEffect(vm.selectedStationId, ids) {
+    LaunchedEffect(vm.selectedStationId, ids, vm.routeSelectionVersion) {
         val index = ids.indexOf(vm.selectedStationId)
         if (index >= 0) listState.animateScrollToItem(index + if (header == null) 1 else 2)
     }
@@ -53,11 +55,11 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
                     if (nearbyMode) NearbySort.entries.forEach { sort ->
                         ResultSortPill(sort.name, vm.nearbySort == sort) { vm.nearbySort = sort }
                     } else RouteSort.entries.forEach { sort ->
-                        ResultSortPill(sort.label, vm.routeSort == sort) { vm.routeSort = sort }
+                        ResultSortPill(sort.label, vm.routeSort == sort) { vm.chooseRouteSort(sort) }
                     }
                     ResultSortPill("Open now", vm.mapOpenOnly) { vm.mapOpenOnly = !vm.mapOpenOnly }
                 }
-    LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
+    LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("route-results-list"), state = listState,
         contentPadding = PaddingValues(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (header != null) item(key = "map-controls") { header() }

@@ -25,10 +25,11 @@ internal fun NearbyStationCard(
     now: Instant,
     historyVisible: Boolean,
     onToggleHistory: () -> Unit,
+    modifier: Modifier = Modifier,
     history: @Composable () -> Unit,
 ) {
     var details by rememberSaveable(station.id, feedLastSuccessfulRefresh, station.fill) { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth().testTag("nearby-result-${station.id}"),
+    Card(modifier.fillMaxWidth().testTag("nearby-result-${station.id}"),
         colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (cheapest) Text("Cheapest among stations checked", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)

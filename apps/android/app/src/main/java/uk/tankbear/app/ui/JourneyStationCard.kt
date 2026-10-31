@@ -23,6 +23,7 @@ internal fun JourneyStationCard(
     candidate: Candidate,
     result: JourneyResult,
     now: Instant,
+    modifier: Modifier = Modifier,
     litres: String? = null,
     selected: Boolean = false,
     onSelect: (() -> Unit)? = null,
@@ -108,9 +109,9 @@ internal fun JourneyStationCard(
             }
         }
     }
-    val modifier = Modifier.fillMaxWidth().testTag("journey-station-${candidate.stationId}")
+    val cardModifier = modifier.fillMaxWidth().testTag("journey-station-${candidate.stationId}")
     val colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)
     val border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-    if (onSelect != null) Card(onClick = onSelect, modifier = modifier, colors = colors, border = border, content = content)
-    else Card(modifier = modifier, colors = colors, border = border, content = content)
+    if (onSelect != null) Card(onClick = onSelect, modifier = cardModifier, colors = colors, border = border, content = content)
+    else Card(modifier = cardModifier, colors = colors, border = border, content = content)
 }

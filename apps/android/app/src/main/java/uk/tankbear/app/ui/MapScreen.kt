@@ -300,7 +300,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: (
     }
 
     // Baseline, stations and the chosen route. The camera fits once per new result.
-    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.mapNearbyOpenOnly, selectedId, fitRequest, fontScale, dark, mapColors) {
+    LaunchedEffect(map, styleReady, styleRevision, result, nearby, vm.mapOpenOnly, vm.mapNearbyOpenOnly, selectedId, vm.fitCount, fitRequest, fontScale, dark, mapColors) {
         val style = map?.style ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val base = result?.baselineGeometry?.let { Polyline.decode(it) }.orEmpty()

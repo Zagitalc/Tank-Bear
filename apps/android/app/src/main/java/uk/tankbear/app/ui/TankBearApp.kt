@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -75,6 +77,8 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
+                        .consumeWindowInsets(padding)
+                        .imePadding()
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -116,6 +120,11 @@ internal fun SearchActionBar(vm: AppViewModel, fromFind: Boolean, onChoose: (Map
             (vm.formError ?: failure?.message)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (vm.loading) RequestLoading(if (vm.mode == uk.tankbear.app.data.Mode.Nearby) "Checking nearby stations…" else "Checking stations and routes…")
             if (vm.resultsOutdated) Text("Inputs changed — previous results are outdated.", style = MaterialTheme.typography.bodySmall)
+            vm.findResultCount?.let { count ->
+                androidx.compose.material3.TextButton(onClick = vm::revealFindResults, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text(if (count == 0) "View search outcome" else "View $count station result${if (count == 1) "" else "s"}", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                }
+            }
             androidx.compose.material3.Button(
                 onClick = {
                     when {

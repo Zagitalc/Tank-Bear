@@ -2,6 +2,16 @@ package uk.tankbear.app.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextAlign
 import uk.tankbear.app.ui.theme.TankBearTokens
@@ -14,8 +24,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import uk.tankbear.app.data.GeocodingClient
 import uk.tankbear.app.data.PlaceSearchResult
+import uk.tankbear.app.data.normalisePlaceQuery
 
 @Composable
 internal fun PlaceSearch(vm: AppViewModel, target: MapTarget, onShowOnMap: () -> Unit) {
@@ -30,13 +40,14 @@ internal fun PlaceSearch(vm: AppViewModel, target: MapTarget, onShowOnMap: () ->
         onQueryChange = {
             generation++; job?.cancel(); loading = false; result = null; query = it.take(200)
         }, onSearch = {
+            if (loading || query.trim().length < 3) return@PlaceSearchContent
             loading = true
             result = null
-            val submitted = query
+            val submitted = normalisePlaceQuery(query)
             val revision = ++generation
             job = scope.launch {
                 try {
-                    val response = GeocodingClient(vm.saved.baseUrl, vm.saved.appKey).search(submitted)
+                    val response = vm.placeLookup(vm.saved.baseUrl, vm.saved.appKey, submitted)
                     if (generation == revision) result = response
                 } finally { if (generation == revision) loading = false }
             }
@@ -48,23 +59,46 @@ internal fun PlaceSearch(vm: AppViewModel, target: MapTarget, onShowOnMap: () ->
 
 /** Presentation only; request cancellation and map confirmation stay in the owner. */
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 internal fun PlaceSearchContent(
     query: String, target: MapTarget, loading: Boolean, result: PlaceSearchResult?,
     onQueryChange: (String) -> Unit, onSearch: () -> Unit,
     onChoose: (GeocodedPlace) -> Unit, onAttribution: (String) -> Unit,
 ) {
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val fieldAnchor = remember { BringIntoViewRequester() }
+    val resultAnchor = remember { BringIntoViewRequester() }
+    var fieldFocused by remember { mutableStateOf(false) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val canSearch = query.trim().length >= 3 && !loading
+    val search = {
+        if (canSearch) {
+            focus.clearFocus(force = true)
+            keyboard?.hide()
+            onSearch()
+        }
+    }
+    LaunchedEffect(fieldFocused, imeBottom) {
+        if (fieldFocused) { withFrameNanos { }; fieldAnchor.bringIntoView() }
+    }
+    LaunchedEffect(result) {
+        if (result != null) { withFrameNanos { }; resultAnchor.bringIntoView() }
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
         Text("Search ${target.name.lowercase()} by name or postcode", style = TankBearType.heading,
             modifier = Modifier.semantics { heading() })
         OutlinedTextField(value = query, onValueChange = onQueryChange,
             label = { Text("Place or postcode", style = TankBearType.caption) },
             singleLine = true, textStyle = TankBearType.body,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onSearch = { search() }),
             shape = RoundedCornerShape(TankBearTokens.radius.card),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = TankBearTokens.colors.surface,
                 unfocusedContainerColor = TankBearTokens.colors.surface),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp))
-        Button(enabled = query.trim().length >= 3 && !loading, onClick = onSearch,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).bringIntoViewRequester(fieldAnchor).onFocusChanged { fieldFocused = it.isFocused })
+        Button(enabled = canSearch, onClick = search,
             modifier = Modifier.fillMaxWidth().heightIn(min = TankBearTokens.touch.min),
             shape = RoundedCornerShape(TankBearTokens.radius.pill),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp)) {
@@ -76,14 +110,22 @@ internal fun PlaceSearchContent(
         result?.let { response ->
             val message = response.error ?: if (response.places.isEmpty())
                 "No places found. Try a fuller name or postcode, or choose on the map." else null
-            message?.let {
-                Surface(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-                    color = TankBearTokens.colors.surface, shape = RoundedCornerShape(TankBearTokens.radius.card)) {
-                    Text(it, Modifier.padding(TankBearTokens.space.dp16), style = TankBearType.body,
-                        color = if (response.error != null) MaterialTheme.colorScheme.error else TankBearTokens.colors.text)
+            Column(Modifier.fillMaxWidth().bringIntoViewRequester(resultAnchor), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                message?.let {
+                    Surface(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                        color = TankBearTokens.colors.surface, shape = RoundedCornerShape(TankBearTokens.radius.card)) {
+                        Text(it, Modifier.padding(TankBearTokens.space.dp16), style = TankBearType.body,
+                            color = if (response.error != null) MaterialTheme.colorScheme.error else TankBearTokens.colors.text)
+                    }
+                }
+                if (response.error == null && response.places.isNotEmpty()) {
+                    Text("${response.places.size} place${if (response.places.size == 1) "" else "s"} found. Choose one to confirm on the map.",
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium)
+                    val first = response.places.first()
+                    FindPill(first.label, onClick = { onChoose(first) })
                 }
             }
-            response.places.forEach { place ->
+            response.places.drop(1).forEach { place ->
                 FindPill(place.label, onClick = { onChoose(place) })
             }
             Column {

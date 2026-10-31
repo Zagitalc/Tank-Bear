@@ -31,6 +31,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -197,26 +204,26 @@ private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewMo
         if (!result.ranked || result.candidates.isEmpty()) {
             Text("No suitable stations could be compared for this trip. Try a different start or route, and check your selected fuel. Closed stations or missing prices can limit results.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
         }
-        if (result.candidates.isNotEmpty()) Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
+        if (result.candidates.isNotEmpty()) Text("Station results", style = MaterialTheme.typography.titleMedium)
         val shown = orderedCandidates(result.candidates, vm.routeSort).filter { !vm.mapOpenOnly || it.opening.state == "open" }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RouteSort.entries.forEach { sort -> ResultSortPill(sort.label, vm.routeSort == sort) { vm.routeSort = sort } }
+            RouteSort.entries.forEach { sort -> ResultSortPill(sort.label, vm.routeSort == sort) { vm.chooseRouteSort(sort, fromFind = true) } }
             ResultSortPill("Open now", vm.mapOpenOnly) { vm.mapOpenOnly = !vm.mapOpenOnly }
         }
         if (shown.isEmpty() && result.candidates.isNotEmpty()) {
-            Text("No stations match the Open now filter. Turn it off to see all results.")
+            Text("No stations match the Open now filter. Turn it off to see all results.", if (result.ranked) resultsModifier else Modifier)
             FindPill("Show all results", onClick = { vm.mapOpenOnly = false })
         }
-        shown.forEach { candidate ->
-            key(candidate.stationId) { StationCard(candidate, result, now, vm) { vm.selectStation(candidate.stationId); onShowOnMap() } }
+        shown.forEachIndexed { index, candidate ->
+            key(candidate.stationId) { StationCard(candidate, result, now, vm, if (index == 0 && result.ranked) resultsModifier else Modifier) { vm.selectStation(candidate.stationId); onShowOnMap() } }
         }
     }
 }
 
 @Composable
-private fun StationCard(c: Candidate, r: JourneyResult, now: java.time.Instant, vm: AppViewModel, onMap: () -> Unit) {
+private fun StationCard(c: Candidate, r: JourneyResult, now: java.time.Instant, vm: AppViewModel, modifier: Modifier = Modifier, onMap: () -> Unit) {
     JourneyStationCard(c, r, now, litres = (vm.search as? SearchState.Done)?.inputs?.litres,
-        onMap = onMap, historyVisible = vm.histories.containsKey(c.stationId), onToggleHistory = { vm.toggleHistory(c.stationId) }) {
+        onMap = onMap, historyVisible = vm.histories.containsKey(c.stationId), onToggleHistory = { vm.toggleHistory(c.stationId) }, modifier = modifier) {
         HistoryPanel(vm, c.stationId, now)
     }
 }
@@ -253,7 +260,16 @@ fun CarScreen(vm: AppViewModel) {
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun CarNumberField(value: String, label: String, hint: String, error: String?, onChange: (String) -> Unit) {
+    val anchor = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(focused, imeBottom, error) {
+        if (focused) { withFrameNanos { }; anchor.bringIntoView() }
+    }
     OutlinedTextField(value, onChange, label = { Text(label, style = TankBearType.caption) }, singleLine = true,
         textStyle = TankBearType.body, shape = RoundedCornerShape(TankBearTokens.radius.card),
         isError = error != null,
@@ -261,8 +277,9 @@ private fun CarNumberField(value: String, label: String, hint: String, error: St
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedContainerColor = TankBearTokens.colors.surface,
             unfocusedContainerColor = TankBearTokens.colors.surface),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp))
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focus.clearFocus(force = true); keyboard?.hide() }),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).bringIntoViewRequester(anchor).onFocusChanged { focused = it.isFocused })
 }
 
 @Composable
@@ -441,11 +458,11 @@ private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time
             Text("No stations with data near this start. Choose another start on the map and search again.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
             FindPill("Change start", onClick = onChangeStart)
         }
-        else Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
-        stations.forEach { station ->
+        else Text("Station results", style = MaterialTheme.typography.titleMedium)
+        stations.forEachIndexed { index, station ->
             key(station.id) {
                 NearbyStationCard(station, station.id == cheapest?.id, (vm.nearby as? NearbyState.Done)?.inputs?.litres,
-                    result.feedLastSuccessfulRefresh, now, vm.histories.containsKey(station.id), { vm.toggleHistory(station.id) }) {
+                    result.feedLastSuccessfulRefresh, now, vm.histories.containsKey(station.id), { vm.toggleHistory(station.id) }, modifier = if (index == 0) resultsModifier else Modifier) {
                     HistoryPanel(vm, station.id, now)
                 }
             }
