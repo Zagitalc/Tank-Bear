@@ -1,11 +1,15 @@
 package uk.tankbear.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.CardDefaults
 import uk.tankbear.app.ui.theme.TankBearTokens
@@ -121,7 +125,7 @@ private fun lineOf(points: List<LatLon>): FeatureCollection =
  * the info panel, not behind it, so the attribution MapLibre draws stays visible (the map data licence needs it).
  */
 @Composable
-fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
+fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier, onReturnToFind: () -> Unit = {}) {
     val dark = isSystemInDarkTheme()
     val mapColors = TankBearTokens.colors
     val fontScale = LocalDensity.current.fontScale
@@ -136,6 +140,16 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     var fitted by rememberSaveable { mutableStateOf(0) }
     var fitRequest by remember { mutableStateOf(0) }
     var fittedRequest by remember { mutableStateOf(0) }
+    val returnToFind by rememberUpdatedState(onReturnToFind)
+    fun closeExpanded() {
+        vm.choosingMapLocation = false
+        vm.mapExpanded = false
+        if (vm.mapChoiceReturnsToFind) {
+            vm.mapChoiceReturnsToFind = false
+            returnToFind()
+        }
+    }
+    BackHandler(enabled = vm.mapExpanded) { closeExpanded() }
     val markerImageIds = remember { mutableSetOf<String>() }
 
     DisposableEffect(lifecycle, mapView) {
@@ -166,10 +180,20 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
                 .target(LatLng(MapConfig.INITIAL_LAT, MapConfig.INITIAL_LON)).zoom(MapConfig.INITIAL_ZOOM).build()
             m.addOnCameraIdleListener { camera = m.cameraPosition }
             m.addOnMapClickListener { p ->
-                if (vm.choosingMapLocation) return@addOnMapClickListener false
                 val hit = m.queryRenderedFeatures(m.projection.toScreenLocation(p), STATION_LAYER, SELECTED_LAYER).firstOrNull()
                 val id = hit?.getStringProperty(ID)
-                if (id != null) { vm.selectStation(id); true } else false
+                if (id != null) {
+                    vm.selectStation(id)
+                } else if (!vm.mapExpanded) {
+                    vm.mapExpanded = true
+                } else {
+                    if (!vm.choosingMapLocation) {
+                        vm.mapTarget = MapTarget.Start
+                        vm.choosingMapLocation = true
+                    }
+                    m.moveCamera(CameraUpdateFactory.newLatLng(p))
+                }
+                true
             }
             map = m
         }
@@ -184,6 +208,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
         val markerInk = (if (dark) mapColors.background else mapColors.surface).toArgb()
         m.setStyle(MapConfig.styleUrl(dark)) { style ->
             if (!active) return@setStyle
+            if (dark) MapContrast.apply(style)
             // Bottom to top: baseline, chosen route, stations, start/destination pins.
             style.addSource(GeoJsonSource(BASE_SRC))
             style.addLayer(LineLayer(BASE_LINE, BASE_SRC).withProperties(
@@ -231,7 +256,7 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     val origin = Validation.point(vm.originLat, vm.originLon)
     val destination = if (vm.mode == Mode.AlongJourney) Validation.point(vm.destLat, vm.destLon) else null
 
-    LaunchedEffect(map, vm.choosingMapLocation, vm.mapTarget, vm.placePreview) {
+    LaunchedEffect(map, vm.placePreview) {
         if (map == null) return@LaunchedEffect
         if (vm.choosingMapLocation) {
             if (restorePickerCamera) {
@@ -317,76 +342,66 @@ fun MapScreen(vm: AppViewModel, modifier: Modifier = Modifier) {
     }
 
     BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        var panelFraction by rememberSaveable { mutableStateOf(0.48f) }
-        val availableHeight = maxHeight
         val landscape = maxWidth > maxHeight
-        val totalPixels = with(LocalDensity.current) { maxHeight.toPx() }
-        val largeText = LocalDensity.current.fontScale >= 1.5f
+        val expanded = vm.mapExpanded
+        val largeText = fontScale >= 1.5f
+        var panelHeight by remember { mutableStateOf(0.dp) }
+        val density = LocalDensity.current
+        val mapWidth = if (landscape && !expanded) (maxWidth - 16.dp) / 2 else maxWidth
+        val mapHeight = if (landscape && !expanded) maxHeight
+            else (maxHeight - panelHeight - 8.dp).coerceAtLeast(80.dp)
 
-        val mapContent: @Composable (Modifier) -> Unit = { mapModifier ->
-            Box(mapModifier.clip(RoundedCornerShape(TankBearTokens.radius.card))) {
-                AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().testTag("route-map"))
-                if (vm.choosingMapLocation) {
-                    Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
-                        contentDescription = "Selected location at map centre",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.align(Alignment.Center).size(36.dp))
-                }
+        // Keep this host at the same composition position when expanding or rotating.
+        Box(Modifier.width(mapWidth).height(mapHeight).clip(RoundedCornerShape(TankBearTokens.radius.card))) {
+            AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().testTag("route-map"))
+            if (vm.choosingMapLocation) {
+                Icon(painterResource(if (vm.mapTarget == MapTarget.Start) R.drawable.ic_car else R.drawable.ic_map),
+                    contentDescription = "Selected location at map centre",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.Center).size(36.dp))
+            }
+            FilledIconButton(onClick = { if (expanded) closeExpanded() else vm.mapExpanded = true },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(48.dp)) {
+                Icon(painterResource(if (expanded) R.drawable.ic_close_fullscreen else R.drawable.ic_fullscreen),
+                    contentDescription = if (expanded) "Close expanded map" else "Expand map")
             }
         }
-        val controls: @Composable () -> Unit = {
-            MapLocationControls(vm, map != null, largeText,
-                onConfirm = { map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) } })
-        }
-        val results: @Composable (Modifier) -> Unit = { resultsModifier ->
-            Column(resultsModifier) {
-                if (largeText) {
-                    MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ }, header = {
-                        controls()
-                        TextButton(onClick = { fitRequest++ }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (nearby != null) "Fit stations" else "Fit route")
-                        }
-                    })
-                } else {
-                Row(Modifier.fillMaxWidth().draggable(
-                    orientation = Orientation.Vertical,
-                    state = rememberDraggableState { delta ->
-                        if (!landscape) panelFraction = (panelFraction - delta / totalPixels).coerceIn(0.25f, 0.55f)
-                    }), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    if (!landscape) TextButton(onClick = { panelFraction = if (panelFraction < 0.5f) 0.55f else 0.25f }, modifier = Modifier.weight(1f)) {
-                        Text(if (panelFraction < 0.5f) "More results ↑" else "More map ↓")
+        Column(
+            Modifier.align(Alignment.BottomEnd)
+                .width(if (landscape && !expanded) (maxWidth - 16.dp) / 2 else maxWidth)
+                .then(if (expanded) Modifier.heightIn(max = maxHeight * 0.45f)
+                    else if (landscape) Modifier.fillMaxHeight() else Modifier.height(maxHeight * 0.56f))
+                .onSizeChanged { panelHeight = with(density) { it.height.toDp() } },
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (expanded) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (vm.choosingMapLocation) {
+                        Text("Tap a point or move the map to choose your ${vm.mapTarget.name.lowercase()}.")
+                        vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        FindPill("Use this ${vm.mapTarget.name.lowercase()}", enabled = styleReady, onClick = {
+                            map?.cameraPosition?.target?.let {
+                                vm.setFromMap(LatLon(it.latitude, it.longitude))
+                                if (!vm.choosingMapLocation) closeExpanded()
+                            }
+                        })
+                        FindPill("Cancel", onClick = { closeExpanded() })
+                    } else {
+                        Text("Tap a point to choose your start. Tap a price for station details.")
+                        // Selection details remain available while viewing the large map.
+                        val stationName = selected?.name ?: visibleNearby.firstOrNull { it.id == vm.selectedStationId }?.name
+                        stationName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                        val price = selected?.pencePerLitre ?: visibleNearby.firstOrNull { it.id == vm.selectedStationId }?.fill?.pencePerLitre
+                        price?.let { Text("${MapPrices.label(it)}/L", style = MaterialTheme.typography.titleLarge) }
                     }
-                    TextButton(onClick = { fitRequest++ }, modifier = Modifier.weight(1f)) {
-                        Text(if (nearby != null) "Fit stations" else "Fit route")
-                    }
+                }
+            } else {
+                MapLocationControls(vm, map != null, largeText,
+                    onConfirm = { map?.cameraPosition?.target?.let { vm.setFromMap(LatLon(it.latitude, it.longitude)) } })
+                TextButton(onClick = { fitRequest++ }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (nearby != null) "Fit stations" else "Fit route")
                 }
                 MapResults(vm, onSelect = { vm.selectStation(it); fitRequest++ })
-                }
-            }
-        }
-        if (landscape) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                mapContent(Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (vm.choosingMapLocation) {
-                        Column(Modifier.verticalScroll(rememberScrollState())) { controls() }
-                    } else {
-                        if (!largeText) controls()
-                        results(Modifier.weight(1f))
-                    }
-                }
-            }
-        } else if (largeText) {
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                mapContent(Modifier.fillMaxWidth().height(availableHeight * 0.4f))
-                if (vm.choosingMapLocation) Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { controls() }
-                else results(Modifier.weight(1f))
-            }
-        } else {
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                mapContent(Modifier.weight(1f).fillMaxWidth())
-                controls()
-                if (!vm.choosingMapLocation) results(Modifier.fillMaxWidth().height(availableHeight * panelFraction))
             }
         }
     }

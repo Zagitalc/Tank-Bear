@@ -51,9 +51,9 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
     TankBearTheme {
         Scaffold(
             bottomBar = {
-                Column {
+                if (!vm.mapExpanded || selected != Destination.Map) Column {
                   if (selected == Destination.Find || selected == Destination.Map) SearchActionBar(vm, fromFind = selected == Destination.Find,
-                      onChoose = { target -> vm.beginMapChoice(target); selected = Destination.Map },
+                      onChoose = { target -> vm.mapChoiceReturnsToFind = selected == Destination.Find; vm.beginMapChoice(target); selected = Destination.Map },
                       onCar = { selected = Destination.Car })
                   NavigationBar {
                     Destination.entries.forEach { destination ->
@@ -69,7 +69,7 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
             },
         ) { padding ->
             if (selected == Destination.Map) {
-                MapScreen(vm, Modifier.padding(padding))
+                MapScreen(vm, Modifier.padding(padding), onReturnToFind = { selected = Destination.Find })
             } else {
                 Column(
                     modifier = Modifier
@@ -81,7 +81,10 @@ fun TankBearApp(vm: AppViewModel = viewModel()) {
                 ) {
                     FindBrand()
                     when (selected) {
-                        Destination.Find -> FindScreen(vm, onShowOnMap = { selected = Destination.Map })
+                        Destination.Find -> FindScreen(vm, onShowOnMap = {
+                            vm.mapChoiceReturnsToFind = vm.choosingMapLocation
+                            selected = Destination.Map
+                        })
                         Destination.Car -> {
                             CarScreen(vm)
                             androidx.compose.material3.Button(

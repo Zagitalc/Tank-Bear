@@ -123,6 +123,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var fitCount by mutableStateOf(0)
         private set
 
+    var mapExpanded by mutableStateOf(false)
+    var mapChoiceReturnsToFind by mutableStateOf(false)
     var choosingMapLocation by mutableStateOf(false)
     var placePreview by mutableStateOf<LatLon?>(null)
         private set
@@ -130,6 +132,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         placePreview = preview
         mapTarget = target
         choosingMapLocation = true
+        mapExpanded = true
     }
 
     val inputs: SearchInputs get() = searchInputs(mode, Validation.point(originLat, originLon),
