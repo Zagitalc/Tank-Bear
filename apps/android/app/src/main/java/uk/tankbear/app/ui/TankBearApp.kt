@@ -110,10 +110,11 @@ internal fun SearchActionBar(vm: AppViewModel, fromFind: Boolean, onChoose: (Map
     val missingDestination = vm.mode == uk.tankbear.app.data.Mode.AlongJourney && Validation.point(vm.destLat, vm.destLon) == null
     val correction = if (vm.formError == null) null else if (missingStart) "Choose start" else if (missingDestination) "Choose destination" else if (Validation.litres(vm.saved.litres) == null || (vm.mode != uk.tankbear.app.data.Mode.Nearby && Validation.mpg(vm.saved.mpg) == null)) "Check car details" else null
     val failure = if (vm.mode == uk.tankbear.app.data.Mode.Nearby) (vm.nearby as? NearbyState.Failed)?.failure else (vm.search as? SearchState.Failed)?.failure
+    val remaining = retrySeconds(vm)
     androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-            vm.formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            failure?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
+            (vm.formError ?: failure?.message)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (vm.loading) RequestLoading(if (vm.mode == uk.tankbear.app.data.Mode.Nearby) "Checking nearby stations…" else "Checking stations and routes…")
             if (vm.resultsOutdated) Text("Inputs changed — previous results are outdated.", style = MaterialTheme.typography.bodySmall)
             androidx.compose.material3.Button(
                 onClick = {
@@ -125,7 +126,7 @@ internal fun SearchActionBar(vm: AppViewModel, fromFind: Boolean, onChoose: (Map
                         else -> vm.submit(fromFind)
                     }
                 },
-                enabled = vm.loaded && !vm.choosingMapLocation,
+                enabled = vm.loaded && !vm.choosingMapLocation && (vm.loading || correction != null || remaining == 0L),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             ) {
@@ -133,6 +134,7 @@ internal fun SearchActionBar(vm: AppViewModel, fromFind: Boolean, onChoose: (Map
                     vm.choosingMapLocation -> "Confirm your map location first"
                     vm.loading -> "Cancel search"
                     correction != null -> correction
+                    remaining > 0 -> "Try again in ${remaining}s"
                     failure != null -> "Try search again"
                     vm.resultsOutdated -> "Update results"
                     vm.mode == uk.tankbear.app.data.Mode.Nearby -> "Find nearby stations"

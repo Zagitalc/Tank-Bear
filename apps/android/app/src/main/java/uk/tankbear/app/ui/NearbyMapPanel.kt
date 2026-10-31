@@ -18,7 +18,6 @@ import uk.tankbear.app.ui.theme.TankBearType
 import uk.tankbear.app.ui.theme.TankBearTokens
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import uk.tankbear.app.data.Formatting
 import uk.tankbear.app.data.NearbyResult
 import uk.tankbear.app.data.Validation
@@ -37,10 +36,8 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
     val state = vm.currentMapNearby
     val hasStart = Validation.point(vm.originLat, vm.originLon) != null
     val validLitres = Validation.litres(vm.saved.litres) != null
-    var retryAvailable by remember(state) { mutableStateOf(vm.mapRetryAvailable) }
-    LaunchedEffect(state) {
-        while (state is NearbyState.Failed && !retryAvailable) { delay(1000); retryAvailable = vm.mapRetryAvailable }
-    }
+    val remaining = retrySeconds(vm)
+    val retryAvailable = remaining == 0L
     Column(Modifier.fillMaxWidth().testTag("nearby-panel"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // Only the summary scrolls. Source credit and the action row keep their space.
         Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(panelScroll), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -54,10 +51,10 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
                 FindPill("Check car details", onClick = onCar)
             } else {
                 when (state) {
-                    NearbyState.Idle, NearbyState.Loading -> Text("Checking nearby stations…")
+                    NearbyState.Idle -> Text(if (vm.mapNearbyCancelled) "Search cancelled. Tap Refresh to try again." else if (!retryAvailable) "Please wait before checking nearby prices." else "Tap Refresh to check nearby prices.")
+                    NearbyState.Loading -> RequestLoading("Checking nearby stations…")
                     is NearbyState.Failed -> {
                         Text(state.failure.message, color = MaterialTheme.colorScheme.error)
-                        if (!retryAvailable) Text("Please wait before trying again.")
                     }
                     is NearbyState.Done -> {
                         if (result?.stations.isNullOrEmpty()) Text("No stations found within 5 km. Try another start.")
@@ -93,9 +90,9 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
                 TextButton(enabled = result != null, onClick = { showDetails = false; showStations = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
                     Text("Stations", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
-                TextButton(enabled = state is NearbyState.Done || (state is NearbyState.Failed && retryAvailable),
-                    onClick = { vm.loadMapNearby(force = true) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
-                    Text(if (state is NearbyState.Failed) "Try again" else "Refresh", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                TextButton(enabled = state is NearbyState.Loading || retryAvailable,
+                    onClick = { if (state is NearbyState.Loading) vm.cancelMapNearby() else vm.loadMapNearby(force = true) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+                    Text(if (state is NearbyState.Loading) "Cancel" else if (!retryAvailable) "Try again in ${remaining}s" else if (state is NearbyState.Failed) "Try again" else "Refresh", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                 }
                 TextButton(onClick = { vm.beginMapChoice(MapTarget.Start) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
                     Text("Change start", Modifier.fillMaxWidth(), textAlign = TextAlign.Center)

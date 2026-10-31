@@ -107,6 +107,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     internal var journeyLookup: suspend (String, String, JourneyRequest) -> ApiOutcome = { url, appKey, request ->
         OptimiseClient(url, appKey).optimise(request)
     }
+    internal var nearbyLookup: suspend (String, String, LatLon, FuelType, String) -> ApiOutcome = { url, appKey, point, fuel, litres ->
+        OptimiseClient(url, appKey).nearby(point, fuel, litres)
+    }
 
     /** History panels the person has opened, by station id. Held in memory only. */
     val histories = mutableStateMapOf<String, HistoryState>()
@@ -135,12 +138,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var mapGeneration = 0
     private var mapRequestKey: SearchInputs? = null
     private var mapConnection: Pair<String, String>? = null
-    private var mapRetryAfter = java.time.Instant.EPOCH
+    internal var retryUntil by mutableStateOf(java.time.Instant.EPOCH)
+        private set
+    private var retryConnection by mutableStateOf<Pair<String, String>?>(null)
+    var mapNearbyCancelled by mutableStateOf(false)
+        private set
     internal var mapNow: () -> java.time.Instant = { java.time.Instant.now() }
     internal var mapNearbyLookup: suspend (String, String, LatLon, FuelType, String) -> ApiOutcome = { url, appKey, origin, fuel, litres ->
         OptimiseClient(url, appKey).nearby(origin, fuel, litres)
     }
-    val mapRetryAvailable: Boolean get() = !mapNow().isBefore(mapRetryAfter)
+    val retrySecondsRemaining: Long get() {
+        if (retryConnection != (saved.baseUrl to saved.appKey)) return 0
+        val remaining = java.time.Duration.between(mapNow(), retryUntil)
+        return if (remaining.isNegative || remaining.isZero) 0 else remaining.seconds + if (remaining.nano > 0) 1 else 0
+    }
+    val mapRetryAvailable: Boolean get() = retrySecondsRemaining == 0L
+    private fun respectRetryAfter(failure: ApiOutcome.Failure, connection: Pair<String, String>) {
+        if (connection != (saved.baseUrl to saved.appKey)) return
+        val seconds = failure.retryAfterSeconds?.takeIf { it > 0 } ?: return
+        val until = mapNow().plusSeconds(seconds.toLong())
+        if (retryConnection != connection || until > retryUntil) retryUntil = until
+        retryConnection = connection
+    }
+    fun cancelMapNearby() {
+        mapGeneration++
+        mapJob?.cancel()
+        mapNearby = NearbyState.Idle
+        mapNearbyCancelled = true
+    }
     val mapInputs: SearchInputs get() = searchInputs(Mode.Nearby, Validation.point(originLat, originLon), null, saved)
     val currentMapNearby: NearbyState get() {
         val done = mapNearby as? NearbyState.Done
@@ -162,6 +187,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val generation = ++mapGeneration
         mapRequestKey = key
         mapConnection = connection
+        mapNearbyCancelled = false
         mapNearby = NearbyState.Loading
         mapJob = viewModelScope.launch {
             val outcome = mapNearbyLookup(connection.first, connection.second, origin, key.fuel, litres)
@@ -175,7 +201,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     NearbyState.Done(outcome.result, mapNow(), key)
                 }
                 is ApiOutcome.Failure -> {
-                    mapRetryAfter = mapNow().plusSeconds((outcome.retryAfterSeconds ?: 0).toLong())
+                    respectRetryAfter(outcome, connection)
                     NearbyState.Failed(outcome)
                 }
                 else -> NearbyState.Idle
@@ -334,20 +360,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         histories.clear()
         nearby = NearbyState.Loading
         job = viewModelScope.launch {
-            nearby = when (val outcome = OptimiseClient(connection.baseUrl, connection.appKey).nearby(origin, submittedInputs.fuel, litres)) {
+            nearby = when (val outcome = nearbyLookup(connection.baseUrl, connection.appKey, origin, submittedInputs.fuel, litres)) {
                 is ApiOutcome.NearbyOk -> {
                     selectedStationId = outcome.result.stations.firstOrNull()?.id
                     fitCount++
                     if (fromFind && submittedInputs == inputs) findResultsVersion++
                     NearbyState.Done(outcome.result, java.time.Instant.now(), submittedInputs)
                 }
-                is ApiOutcome.Failure -> NearbyState.Failed(outcome)
+                is ApiOutcome.Failure -> { respectRetryAfter(outcome, connection.baseUrl to connection.appKey); NearbyState.Failed(outcome) }
                 is ApiOutcome.Ok, is ApiOutcome.HistoryOk -> NearbyState.Idle
             }
         }
     }
 
     fun submit(fromFind: Boolean = false) {
+        if (retrySecondsRemaining > 0) return
         formError = null
         if (mode == Mode.Nearby) return searchNearby(fromFind)
         val origin = Validation.point(originLat, originLon)
@@ -371,7 +398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (fromFind && submittedInputs == inputs) findResultsVersion++
                     SearchState.Done(outcome, java.time.Instant.now(), submittedInputs)
                 }
-                is ApiOutcome.Failure -> SearchState.Failed(outcome)
+                is ApiOutcome.Failure -> { respectRetryAfter(outcome, connection.baseUrl to connection.appKey); SearchState.Failed(outcome) }
                 is ApiOutcome.NearbyOk, is ApiOutcome.HistoryOk -> SearchState.Idle
             }
         }

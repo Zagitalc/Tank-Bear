@@ -47,6 +47,7 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
         if (index >= 0) listState.animateScrollToItem(index + if (header == null) 1 else 2)
     }
     val now = java.time.Instant.now()
+    val remaining = retrySeconds(vm)
     Column(Modifier.fillMaxSize()) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (nearbyMode) NearbySort.entries.forEach { sort ->
@@ -84,8 +85,11 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
                 if (nearby != null) Text("Nearby distances are straight-line distances. Fill prices exclude driving costs.")
                 val loading = if (nearbyMode) vm.nearby is NearbyState.Loading else vm.search is SearchState.Loading
                 val failure = if (nearbyMode) (vm.nearby as? NearbyState.Failed)?.failure else (vm.search as? SearchState.Failed)?.failure
-                if (loading) { Text("Checking stations…"); TextButton(onClick = vm::cancel) { Text("Cancel") } }
-                failure?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
+                if (loading) { RequestLoading("Checking stations and routes…"); TextButton(onClick = vm::cancel) { Text("Cancel search") } }
+                failure?.let {
+                    Text(it.message, color = MaterialTheme.colorScheme.error)
+                    FindPill(if (remaining > 0) "Try again in ${remaining}s" else "Try search again", enabled = remaining == 0L, onClick = { vm.submit() })
+                }
                 if (!loading && failure == null && ids.isEmpty()) Text(if (result == null && nearby == null)
                     "Choose your start, then use the search button below." else if (vm.mapOpenOnly) "No stations match the Open now filter. Turn it off to see all results." else "No suitable stations found. Try another start or route, and check your selected fuel.")
                 if (ids.isEmpty() && vm.mapOpenOnly && (result != null || nearby != null)) TextButton(onClick = { vm.mapOpenOnly = false }) { Text("Show all results") }

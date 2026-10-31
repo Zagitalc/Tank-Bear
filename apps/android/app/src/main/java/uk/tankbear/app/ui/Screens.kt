@@ -143,25 +143,12 @@ fun FindScreen(vm: AppViewModel, onShowOnMap: () -> Unit) {
         }
         if (vm.mode == Mode.Nearby) {
             if (vm.nearby is NearbyState.Done) FindPill("Map and results", onClick = onShowOnMap)
-            NearbySection(vm, resultsModifier)
+            NearbySection(vm, resultsModifier, onChangeStart = { choosingLocation = MapTarget.Start })
             return@Column
         }
         when (val s = vm.search) {
             SearchState.Idle -> Unit
-            SearchState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator(Modifier.size(24.dp))
-                Text("Checking stations and routes…")
-                OutlinedButton(onClick = vm::cancel) { Text("Cancel") }
-            }
-            is SearchState.Failed -> Card(
-                Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(s.failure.message, style = MaterialTheme.typography.bodyLarge)
-                    s.failure.retryAfterSeconds?.let { Text("Try again in about $it seconds.") }
-                }
-            }
+            SearchState.Loading, is SearchState.Failed -> Unit // Fixed action bar owns request feedback.
             is SearchState.Done -> Results(s.outcome.result, s.at, vm, onShowOnMap, resultsModifier)
         }
     }
@@ -424,28 +411,21 @@ private fun SavedPlaces(vm: AppViewModel) {
 }
 
 @Composable
-private fun NearbySection(vm: AppViewModel, resultsModifier: Modifier = Modifier) {
+private fun NearbySection(vm: AppViewModel, resultsModifier: Modifier = Modifier, onChangeStart: () -> Unit) {
     when (val n = vm.nearby) {
         NearbyState.Idle -> Text(
             "Shows the closest stations to your start with today's price for your fuel and what filling up would cost. It compares nothing about a journey.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        NearbyState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator(Modifier.size(24.dp))
-            Text("Looking for stations…")
-            OutlinedButton(onClick = vm::cancel) { Text("Cancel") }
-        }
-        is NearbyState.Failed -> Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-            Column(Modifier.padding(16.dp)) { Text(n.failure.message, style = MaterialTheme.typography.bodyLarge) }
-        }
-        is NearbyState.Done -> NearbyResults(vm, n.result, n.at, resultsModifier)
+        NearbyState.Loading, is NearbyState.Failed -> Unit // Fixed action bar owns request feedback.
+        is NearbyState.Done -> NearbyResults(vm, n.result, n.at, resultsModifier, onChangeStart)
     }
 }
 
 @Composable
-private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time.Instant, resultsModifier: Modifier = Modifier) {
+private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time.Instant, resultsModifier: Modifier = Modifier, onChangeStart: () -> Unit) {
     val stations = vm.sortedNearby(result)
-    // "Cheapest here" only among stations that look available and have a price.
+    // Only badge stations that look available and have a price.
     val cheapest = stations.filter { it.fill != null && !it.temporaryClosure && it.opening.state != "closed" }.minByOrNull { it.fill!!.fillCostPence }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Within 3 miles of your start, ${stations.size} found", style = MaterialTheme.typography.titleMedium)
@@ -457,28 +437,18 @@ private fun NearbyResults(vm: AppViewModel, result: NearbyResult, now: java.time
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NearbySort.entries.forEach { sort -> FilterChip(modifier = Modifier.weight(1f).heightIn(min = 48.dp), selected = vm.nearbySort == sort, onClick = { vm.nearbySort = sort }, label = { Text(sort.name, Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }) }
         }
-        if (stations.isEmpty()) Text("No stations with data near this start. Choose another start on the map and search again.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
+        if (stations.isEmpty()) {
+            Text("No stations with data near this start. Choose another start on the map and search again.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
+            FindPill("Change start", onClick = onChangeStart)
+        }
         else Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
-        stations.forEach { NearbyCard(it, it.id == cheapest?.id, now, vm) }
-    }
-}
-
-@Composable
-private fun NearbyCard(s: NearbyStation, cheapest: Boolean, now: java.time.Instant, vm: AppViewModel) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
-        Column(Modifier.padding(TankBearTokens.space.dp16), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp12)) {
-            if (cheapest) Text("Cheapest here", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(s.name, style = TankBearType.heading)
-            Text("${Formatting.metresAsMiles(s.distanceMetres)} away · ${Formatting.opening(s.opening)}")
-            if (s.temporaryClosure) Text("Reported temporarily closed for three days or more.", style = MaterialTheme.typography.bodyMedium)
-            s.fill?.let {
-                Text(Formatting.pricePerLitre(it.pencePerLitre), style = TankBearType.price)
-                Text("Price changed ${Formatting.age(it.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
-                Text("Filling up would cost ${Formatting.pence(it.fillCostPence)}", style = MaterialTheme.typography.titleSmall)
-                Formatting.versusMedian(it.vsLocalMedianPencePerLitre)?.let { line -> Text(line, style = MaterialTheme.typography.bodyMedium) }
-                FindPill(if (vm.histories.containsKey(s.id)) "Hide history" else "Price history", onClick = { vm.toggleHistory(s.id) })
-                HistoryPanel(vm, s.id, now)
-            } ?: Text("No price for your fuel here.", style = MaterialTheme.typography.bodyMedium)
+        stations.forEach { station ->
+            key(station.id) {
+                NearbyStationCard(station, station.id == cheapest?.id, (vm.nearby as? NearbyState.Done)?.inputs?.litres,
+                    result.feedLastSuccessfulRefresh, now, vm.histories.containsKey(station.id), { vm.toggleHistory(station.id) }) {
+                    HistoryPanel(vm, station.id, now)
+                }
+            }
         }
     }
 }
