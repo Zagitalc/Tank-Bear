@@ -77,7 +77,10 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
                                         Text(opening, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                                     }
                                 }
-                                Text("${Formatting.metresAsMiles(station.distanceMetres)} away · straight line", style = MaterialTheme.typography.bodySmall, color = TankBearTokens.colors.muted)
+                                station.fill?.let {
+                                    Text("Filling ${vm.mapInputs.litres} L would cost ${Formatting.pence(it.fillCostPence)}", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                Text("${Formatting.metresAsMiles(station.distanceMetres)} away · straight line · excludes driving costs", style = MaterialTheme.typography.bodySmall, color = TankBearTokens.colors.muted)
                             }
                         }
                     }
@@ -101,7 +104,7 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
         }
     }
     if (showStations && result != null) {
-        ModalBottomSheet(onDismissRequest = { showStations = false }) {
+        ModalBottomSheet(onDismissRequest = { showStations = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
             LazyColumn(Modifier.fillMaxWidth().fillMaxHeight(0.8f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Nearby stations", style = MaterialTheme.typography.headlineSmall) }
                 if (selected != null) item {
@@ -114,16 +117,21 @@ internal fun NearbyMapPanel(vm: AppViewModel, result: NearbyResult?, onCar: () -
                             Text(station.name, style = MaterialTheme.typography.titleMedium)
                             station.brand?.takeIf { it.isNotBlank() && !station.name.contains(it, ignoreCase = true) }?.let { Text(it) }
                             Text(station.fill?.let { Formatting.pricePerLitre(it.pencePerLitre) } ?: "No price for your fuel", style = TankBearType.price)
+                            station.fill?.let {
+                                Text("Filling ${vm.mapInputs.litres} L would cost ${Formatting.pence(it.fillCostPence)}", style = MaterialTheme.typography.titleSmall)
+                            }
                             Text(if (station.temporaryClosure) "Reported temporarily closed" else Formatting.opening(station.opening))
                             Text("${Formatting.metresAsMiles(station.distanceMetres)} away (straight line). Driving costs not calculated.")
                             station.fill?.let { Text("Price changed ${Formatting.age(it.priceLastUpdated, java.time.Instant.now())}") }
                             result.feedLastSuccessfulRefresh?.let { Text("Prices checked ${Formatting.age(it, java.time.Instant.now())}.") }
                             Text("Within 5 km of your start · up to 20 stations", style = MaterialTheme.typography.bodySmall)
                             DataAttribution()
-                            TextButton(onClick = { vm.toggleHistory(station.id) }) { Text(if (vm.histories.containsKey(station.id)) "Hide history for ${station.name}" else "Price history for ${station.name}") }
-                            HistoryPanel(vm, station.id, java.time.Instant.now())
                         }
                     }
+                    item {
+                        TextButton(onClick = { vm.toggleHistory(station.id) }) { Text(if (vm.histories.containsKey(station.id)) "Hide history for ${station.name}" else "Price history for ${station.name}") }
+                    }
+                    item { HistoryPanel(vm, station.id, java.time.Instant.now()) }
                 }
                 item {
                     val median = MapPrices.price(result.localMedianPencePerLitre)

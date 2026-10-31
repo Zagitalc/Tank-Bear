@@ -92,23 +92,13 @@ internal fun MapResults(vm: AppViewModel, onSelect: (String) -> Unit, header: (@
             }
         }
         if (result != null) items(candidates, key = { it.stationId }) { c ->
-            ResultCard(c.stationId == vm.selectedStationId, { onSelect(c.stationId) }) {
-                Text("${c.rank}. ${c.name}", style = TankBearType.heading)
-                if (c.stationId == result.bestOverallId) Text("Best overall among stations checked", color = MaterialTheme.colorScheme.primary)
-                Text(Formatting.pricePerLitre(c.pencePerLitre), style = TankBearType.price)
-                Text(MapPrices.comparison(c.pencePerLitre, median, medianScope), style = TankBearType.caption)
-                Text("Price changed ${Formatting.age(c.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
-                Text(Formatting.opening(c.opening))
-                Text("Fill ${Formatting.pence(c.fillCostPence)} + driving ${Formatting.pence(c.detourFuelCostPence)}")
-                Text("Estimated total: ${Formatting.pence(c.comparisonCostPence)} (rounded)", style = TankBearType.heading)
-                Text("${if (result.baselineGeometry != null) "Extra detour" else if (result.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
-                Text("Using the MPG and fuel price from this search.", style = MaterialTheme.typography.bodySmall)
-                val reference = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
-                Text(if (c.stationId == result.referenceStationId) "Comparison station" else Formatting.savingHeadline(c.trueSavingPence, reference))
-                if (c.stationId != result.referenceStationId && Formatting.isSmallDifference(c.trueSavingPence)) Text("A difference this small is within the estimate's margin.")
-                HistoryControl(vm, c.stationId, now)
+            JourneyStationCard(c, result, now, litres = journeyState?.inputs?.litres,
+                selected = c.stationId == vm.selectedStationId, onSelect = { onSelect(c.stationId) },
+                historyVisible = vm.histories.containsKey(c.stationId), onToggleHistory = { vm.toggleHistory(c.stationId) }) {
+                HistoryPanel(vm, c.stationId, now)
             }
         }
+
         items(stations, key = { it.id }) { s ->
             ResultCard(s.id == vm.selectedStationId, { onSelect(s.id) }) {
                 Text(s.name, style = TankBearType.heading)

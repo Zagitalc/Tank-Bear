@@ -92,6 +92,8 @@ class NearbyMapPresentationTest {
             if (fontScale == 1f) {
                 compose.onNodeWithText("173.9p/L").assertIsDisplayed()
                 compose.onNodeWithText("Open 24 hours").assertIsDisplayed()
+                compose.onNodeWithText("Filling 30 L would cost £52.17").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("excludes driving costs", substring = true).performScrollTo().assertIsDisplayed()
             }
             if (panelWidth == 360) {
                 val name = "nearby-compact-${if (dark) "dark" else "light"}-${if (fontScale == 1f) "normal" else "large"}.png"
@@ -107,6 +109,7 @@ class NearbyMapPresentationTest {
         compose.onNodeWithTag("nearby-station-summary").performClick()
         compose.onNodeWithTag("nearby-station-details").assertExists()
         compose.onNodeWithTag("nearby-station-details").onChildren().filter(hasText(longName)).onFirst().assertIsDisplayed()
+        compose.onNode(hasText("Filling 30 L would cost £52.17") and hasAnyAncestor(hasTestTag("nearby-station-details"))).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Price changed", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Prices checked", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Price history for $longName").performScrollTo().assertIsDisplayed()

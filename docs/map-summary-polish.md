@@ -33,3 +33,11 @@ these checks complete.
 
 Final verification: 28 JVM tests, 14 focused emulator tests, debug/beta builds
 and beta lint passed.
+
+Follow-up: nearby Map summaries and selected-station details now include
+“Filling [litres] L would cost [amount]”, using the backend's `fillCostPence`
+and the current nearby request's litres. The summary explicitly excludes
+driving costs. No fill estimate is shown when the selected fuel has no price.
+The existing presentation checks now cover the fill amount and its qualifier.
+The station sheet opens expanded, and history has its own list row so the
+longer details remain reachable.

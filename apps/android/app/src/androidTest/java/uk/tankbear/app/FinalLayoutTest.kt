@@ -25,7 +25,9 @@ class FinalLayoutTest {
         compose.waitUntil(10_000) { compose.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE }
         val vm = ViewModelProvider(compose.activity)[AppViewModel::class.java]
         compose.waitUntil(10_000) { vm.loaded }
-        compose.runOnIdle { vm.update { it.copy(mpg = "40", litres = "30") }; vm.useExample() }
+        val savedBefore = vm.saved
+        val placeName = "Long name for a saved public location"
+        compose.runOnIdle { vm.update { it.copy(mpg = "40", litres = "30", places = emptyList()) }; vm.useExample(); vm.savePlace(placeName, false) }
         val dark = mutableStateOf(false)
         compose.runOnUiThread {
             compose.activity.setContent {
@@ -40,7 +42,25 @@ class FinalLayoutTest {
         try {
             for (night in listOf(false, true)) {
                 compose.runOnIdle { dark.value = night }
+                compose.onNodeWithText("Car").performClick()
+                compose.onNodeWithText("Use UK Imperial MPG.", substring = true).performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("Sets the fill estimate on Find and Map.", substring = true).performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("Settings").performClick()
+                for (label in listOf("Location", "Privacy", "Data", "App version")) {
+                    compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+                }
+                compose.onNodeWithText("${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", substring = true).performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText("Find").performClick()
+                compose.onNodeWithText("Manage saved places").performScrollTo().performClick()
+                compose.onNodeWithText(placeName).performScrollTo().assertIsDisplayed()
+                for (action in listOf("Start", "Destination", "Remove", "Save start", "Save destination")) {
+                    val selector = hasText(action) and hasAnyAncestor(hasTestTag("saved-places"))
+                    compose.onNode(selector).performScrollTo().assertIsDisplayed()
+                    val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                    compose.onNode(selector, useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+                    assertFalse("$action must wrap without clipping", layouts.single().hasVisualOverflow)
+                }
+                compose.onNodeWithText("Hide saved places").performScrollTo().performClick()
                 compose.onNodeWithText("Find the best stop").assertIsDisplayed()
                 compose.onNodeWithTag("choose-start").performScrollTo().performClick()
                 compose.onNodeWithText("Choose start on map").performScrollTo().performClick()
@@ -51,6 +71,8 @@ class FinalLayoutTest {
                 compose.onNodeWithText("Find the best stop").assertIsDisplayed()
             }
         } finally {
+            compose.runOnIdle { vm.update { savedBefore } }
+            kotlinx.coroutines.runBlocking { uk.tankbear.app.data.Prefs(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext).save(savedBefore) }
             compose.runOnUiThread { compose.activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         }
     }

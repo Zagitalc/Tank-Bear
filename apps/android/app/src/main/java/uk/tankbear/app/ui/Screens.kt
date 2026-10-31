@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.FilterChipDefaults
 import android.Manifest
 import android.content.Intent
@@ -22,6 +23,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -59,6 +62,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
@@ -67,6 +71,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
@@ -206,7 +211,6 @@ private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewMo
             Text("No suitable stations could be compared for this trip. Try a different start or route, and check your selected fuel. Closed stations or missing prices can limit results.", resultsModifier, style = MaterialTheme.typography.bodyLarge)
         }
         if (result.candidates.isNotEmpty()) Text("Station results", resultsModifier, style = MaterialTheme.typography.titleMedium)
-        val referenceName = result.candidates.firstOrNull { it.stationId == result.referenceStationId }?.name
         val shown = orderedCandidates(result.candidates, vm.routeSort).filter { !vm.mapOpenOnly || it.opening.state == "open" }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RouteSort.entries.forEach { sort -> ResultSortPill(sort.label, vm.routeSort == sort) { vm.routeSort = sort } }
@@ -216,36 +220,17 @@ private fun Results(result: JourneyResult, now: java.time.Instant, vm: AppViewMo
             Text("No stations match the Open now filter. Turn it off to see all results.")
             FindPill("Show all results", onClick = { vm.mapOpenOnly = false })
         }
-        shown.forEach { StationCard(it, result, referenceName, now, vm) { vm.selectStation(it.stationId); onShowOnMap() } }
+        shown.forEach { candidate ->
+            key(candidate.stationId) { StationCard(candidate, result, now, vm) { vm.selectStation(candidate.stationId); onShowOnMap() } }
+        }
     }
 }
 
 @Composable
-private fun StationCard(c: Candidate, r: JourneyResult, referenceName: String?, now: java.time.Instant, vm: AppViewModel, onMap: () -> Unit) {
-    val labels = buildList {
-        if (c.stationId == r.bestOverallId) add("Best overall")
-        if (c.stationId == r.cheapestPumpId) add("Cheapest pump")
-        if (c.stationId == r.smallestDetourId) add("Smallest detour")
-    }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
-        Column(Modifier.padding(TankBearTokens.space.dp16), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp12)) {
-            if (labels.isNotEmpty()) Text(labels.joinToString(" · "), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text("${c.rank}. ${c.name}", style = TankBearType.heading)
-            Text(Formatting.pricePerLitre(c.pencePerLitre), style = TankBearType.price)
-            Text("Price changed ${Formatting.age(c.priceLastUpdated, now)}", style = TankBearType.caption, color = TankBearTokens.colors.muted)
-            Text(Formatting.opening(c.opening), style = MaterialTheme.typography.bodyMedium)
-            Text("${if (r.baselineGeometry != null) "Extra driving" else if (r.oneWay) "One-way driving" else "There and back"}: ${Formatting.miles(c.detourDistanceMetres)}, ${Formatting.minutes(c.detourDurationSeconds)}")
-            Text("Fill ${Formatting.pence(c.fillCostPence)} + ${if (r.baselineGeometry != null) "detour" else if (r.oneWay) "one-way driving" else "return driving"} fuel ${Formatting.pence(c.detourFuelCostPence)}")
-            Text("Total for this stop ${Formatting.pence(c.comparisonCostPence)}", style = TankBearType.heading)
-            val headline = if (c.stationId == r.referenceStationId) "This is the comparison station" else Formatting.savingHeadline(c.trueSavingPence, referenceName)
-            Text(headline, style = MaterialTheme.typography.titleSmall)
-            if (c.stationId != r.referenceStationId && Formatting.isSmallDifference(c.trueSavingPence)) {
-                Text("A difference this small is within the estimate's margin.", style = MaterialTheme.typography.bodyMedium)
-            }
-            FindPill(if (vm.histories.containsKey(c.stationId)) "Hide history" else "Price history", onClick = { vm.toggleHistory(c.stationId) })
-            FindPill("Show route on map", onClick = onMap)
-            HistoryPanel(vm, c.stationId, now)
-        }
+private fun StationCard(c: Candidate, r: JourneyResult, now: java.time.Instant, vm: AppViewModel, onMap: () -> Unit) {
+    JourneyStationCard(c, r, now, litres = (vm.search as? SearchState.Done)?.inputs?.litres,
+        onMap = onMap, historyVisible = vm.histories.containsKey(c.stationId), onToggleHistory = { vm.toggleHistory(c.stationId) }) {
+        HistoryPanel(vm, c.stationId, now)
     }
 }
 
@@ -254,8 +239,9 @@ fun CarScreen(vm: AppViewModel) {
     val s = vm.saved
     Column(verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
         Text("Your car, your fuel costs", style = TankBearType.heading)
-        Text("Use your car's fuel type and Imperial MPG to estimate what a detour costs.",
+        Text("Choose your fuel, driving efficiency and how much you plan to buy.",
             style = TankBearType.body, color = TankBearTokens.colors.muted)
+        Text("Fuel type", style = MaterialTheme.typography.titleMedium)
         Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
             vm.fuelOptions().forEach { f ->
                 androidx.compose.material3.Surface(Modifier.fillMaxWidth(),
@@ -266,17 +252,25 @@ fun CarScreen(vm: AppViewModel) {
                 }
             }
         }
-        CarNumberField(s.mpg, "Miles per Imperial gallon (MPG)") { v -> vm.update { it.copy(mpg = v) } }
-        CarNumberField(s.litres, "Litres to buy") { v -> vm.update { it.copy(litres = v) } }
-        Text("Saved on this phone only. No account, no registration lookup.",
+        CarNumberField(s.mpg, "Miles per Imperial gallon (MPG)",
+            "Use UK Imperial MPG. This estimates driving fuel costs; nearby fill estimates only need fuel type and litres.",
+            if (Validation.mpg(s.mpg) == null) "Enter 5–200 Imperial MPG, with up to 3 decimal places." else null
+        ) { v -> vm.update { it.copy(mpg = v) } }
+        CarNumberField(s.litres, "Litres to buy",
+            "The amount you plan to buy. Sets the fill estimate on Find and Map.",
+            if (Validation.litres(s.litres) == null) "Enter 1–500 litres, with up to 3 decimal places." else null
+        ) { v -> vm.update { it.copy(litres = v) } }
+        Text("Saved automatically on this phone. No account, no registration lookup.",
             style = TankBearType.caption, color = TankBearTokens.colors.muted)
     }
 }
 
 @Composable
-private fun CarNumberField(value: String, label: String, onChange: (String) -> Unit) {
+private fun CarNumberField(value: String, label: String, hint: String, error: String?, onChange: (String) -> Unit) {
     OutlinedTextField(value, onChange, label = { Text(label, style = TankBearType.caption) }, singleLine = true,
         textStyle = TankBearType.body, shape = RoundedCornerShape(TankBearTokens.radius.card),
+        isError = error != null,
+        supportingText = { Text(error ?: hint) },
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedContainerColor = TankBearTokens.colors.surface,
             unfocusedContainerColor = TankBearTokens.colors.surface),
@@ -289,9 +283,26 @@ fun SettingsScreen(vm: AppViewModel) {
     val s = vm.saved
     Column(verticalArrangement = Arrangement.spacedBy(TankBearTokens.space.dp16)) {
         Text("You’re in control", style = TankBearType.heading)
-        Text("No account needed. Tank Bear will ask before using your location.", style = TankBearType.body)
-        Text("Connected to Tank Bear. No account or app key is needed for the friend beta.", style = TankBearType.body)
-        Text("Your search locations are sent to Tank Bear when you tap Find. Opening Map with a selected start also sends it to load nearby prices. Car settings and saved places stay on this phone. No background location or analytics. Map tiles are requested from OpenFreeMap.", style = TankBearType.body, color = TankBearTokens.colors.muted)
+        Text("No account or app key is needed for the friend beta.", style = MaterialTheme.typography.bodyMedium)
+        SettingsSection("Location", listOf(
+            "Choose on map works without location permission. Use my location reads your location once when you tap it and asks for permission when needed.",
+            "Find sends your chosen start and destination, when needed, to Tank Bear when you tap Find. Map uses your chosen start to request nearby prices when opened or refreshed.",
+        ))
+        SettingsSection("Privacy", listOf(
+            "Saved places and car settings are saved on this phone. Searches use your selected locations, fuel type, litres and MPG when needed to estimate costs.",
+            "No background location, accounts or analytics.",
+            "Search places sends your search text through Tank Bear to Geoapify. Viewing the map requests tiles from OpenFreeMap.",
+        ))
+        SettingsSection("Data", listOf(
+            stringResource(R.string.data_attribution),
+            "Price changed shows when an individual price last changed. Prices checked shows the last successful feed refresh.",
+            "Nearby distances are straight-line distances and fill estimates exclude driving costs. Journey results use routed driving costs.",
+            "Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.",
+        ))
+        SettingsSection("App version", listOf(
+            "${stringResource(R.string.app_name)} ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+            "Include this version when reporting a problem.",
+        ))
         if (BuildConfig.DEBUG) {
             var advanced by remember { mutableStateOf(false) }
             TextButton(onClick = { advanced = !advanced }) { Text("Developer connection settings") }
@@ -306,15 +317,22 @@ fun SettingsScreen(vm: AppViewModel) {
             visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            "Your journey is sent to this server only when you tap Find. Nothing is stored there, and no location is collected in the background. " +
+            "Find and nearby Map requests use this server. Place searches also pass through it. " +
                 "10.0.2.2 reaches a server on your computer from the Android emulator.",
             style = MaterialTheme.typography.bodyMedium,
         )
             }
         }
-        Text("About the data", style = TankBearType.heading)
-        Text(stringResource(R.string.data_attribution), style = TankBearType.caption, color = TankBearTokens.colors.muted)
-        Text("Map data © OpenStreetMap contributors, shown through MapLibre with OpenFreeMap tiles.", style = TankBearType.caption, color = TankBearTokens.colors.muted)
+    }
+}
+
+@Composable
+private fun SettingsSection(title: String, lines: List<String>) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+            lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
     }
 }
 
@@ -367,27 +385,41 @@ internal fun LocationButton(vm: AppViewModel, onLocationChosen: () -> Unit = {})
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun SavedPlaces(vm: AppViewModel) {
-    var name by remember { mutableStateOf("") }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var name by rememberSaveable { mutableStateOf("") }
+    val actionWidth = 112.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val saveWidth = 160.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    Column(Modifier.testTag("saved-places"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Saved places", style = MaterialTheme.typography.titleMedium)
         if (vm.saved.places.isEmpty()) Text("None yet. Saved on this phone only.", style = MaterialTheme.typography.bodyMedium)
         vm.saved.places.forEach { place ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(place.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                TextButton(onClick = { vm.usePlace(place, asDestination = false) }) { Text("Start") }
-                if (vm.mode == Mode.AlongJourney) TextButton(onClick = { vm.usePlace(place, asDestination = true) }) { Text("Destination") }
-                TextButton(onClick = { vm.removePlace(place) }) { Text("Remove") }
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = TankBearTokens.colors.surface)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(place.name, style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { vm.usePlace(place, asDestination = false) }, modifier = Modifier.width(actionWidth).heightIn(min = 48.dp)) { Text("Start", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                        if (vm.mode == Mode.AlongJourney) TextButton(onClick = { vm.usePlace(place, asDestination = true) }, modifier = Modifier.width(actionWidth).heightIn(min = 48.dp)) { Text("Destination", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                        TextButton(onClick = { vm.removePlace(place) }, modifier = Modifier.width(actionWidth).heightIn(min = 48.dp)) { Text("Remove", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
+                    }
+                }
+            }
+        }
+        vm.removedPlaceName?.let { removed ->
+            Column {
+                Text("Removed $removed from this phone.")
+                TextButton(onClick = vm::undoRemovePlace, modifier = Modifier.width(actionWidth).heightIn(min = 48.dp)) { Text("Undo", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
             }
         }
         OutlinedTextField(name, { name = it }, label = { Text("Name for a new place (Home, Work…)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { vm.savePlace(name, forDestination = false); if (vm.placeMessage == null) name = "" }) { Text("Save start") }
+        Text("Using an existing name updates that place.", style = MaterialTheme.typography.bodySmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedButton(onClick = { if (vm.savePlace(name, forDestination = false)) name = "" }, modifier = Modifier.width(saveWidth).heightIn(min = 48.dp)) { Text("Save start", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
             if (vm.mode == Mode.AlongJourney) {
-                OutlinedButton(onClick = { vm.savePlace(name, forDestination = true); if (vm.placeMessage == null) name = "" }) { Text("Save destination") }
+                OutlinedButton(onClick = { if (vm.savePlace(name, forDestination = true)) name = "" }, modifier = Modifier.width(saveWidth).heightIn(min = 48.dp)) { Text("Save destination", Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
             }
         }
-        vm.placeMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        vm.placeMessage?.let { Text(it, color = if (vm.placeMessageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

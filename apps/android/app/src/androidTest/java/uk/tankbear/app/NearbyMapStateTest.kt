@@ -114,7 +114,7 @@ class NearbyMapStateTest {
         }
         compose.waitUntil(5000) { vm.search is SearchState.Done }
         compose.runOnUiThread { compose.activity.setContent { TankBearApp(vm) } }
-        compose.onNodeWithText("Show route on map").performScrollTo().performClick()
+        compose.onNodeWithText("View route").performScrollTo().performClick()
         compose.onNodeWithText("Back to Find").assertIsDisplayed()
         compose.onNodeWithText("Fit route").assertIsDisplayed()
         compose.runOnIdle { assertTrue(vm.mapJourney); assertEquals("route", vm.selectedStationId); assertEquals(0, nearbyCalls) }

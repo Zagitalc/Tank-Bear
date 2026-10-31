@@ -191,6 +191,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var locationMessage by mutableStateOf<String?>(null)
     var placeMessage by mutableStateOf<String?>(null)
         private set
+    var placeMessageIsError by mutableStateOf(false)
+        private set
+    private var removedPlace by mutableStateOf<Pair<Int, SavedPlace>?>(null)
+    val removedPlaceName: String? get() = removedPlace?.second?.name
 
     /** Which endpoint the explicit map picker is choosing. */
     var mapTarget by mutableStateOf(MapTarget.Start)
@@ -270,19 +274,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         describeLocation(MapTarget.Start, "Current location")
     }
 
-    fun savePlace(name: String, forDestination: Boolean) {
+    fun savePlace(name: String, forDestination: Boolean): Boolean {
+        placeMessageIsError = true
         val point = if (forDestination) Validation.point(destLat, destLon) else Validation.point(originLat, originLon)
-        if (point == null) { placeMessage = "Set the ${if (forDestination) "destination" else "start"} first."; return }
+        if (point == null) { placeMessage = "Set the ${if (forDestination) "destination" else "start"} first."; return false }
         val updated = Places.add(saved.places, name, point)
         if (updated == null) {
             placeMessage = if (name.isBlank()) "Give the place a name." else "You can keep up to ${Places.MAX} places. Remove one first."
-            return
+            return false
         }
-        placeMessage = null
+        val replaced = saved.places.any { it.name.equals(name.trim().take(40), ignoreCase = true) }
         update { it.copy(places = updated) }
+        removedPlace = null
+        placeMessageIsError = false
+        placeMessage = "${if (replaced) "Updated" else "Saved"} ${updated.last().name} on this phone."
+        return true
     }
 
-    fun removePlace(place: SavedPlace) { update { it.copy(places = it.places - place) } }
+    fun removePlace(place: SavedPlace) {
+        val index = saved.places.indexOf(place)
+        if (index < 0) return
+        removedPlace = index to place
+        placeMessage = null
+        update { it.copy(places = it.places - place) }
+    }
+
+    fun undoRemovePlace() {
+        val (index, place) = removedPlace ?: return
+        if (saved.places.size >= Places.MAX || saved.places.any { it.name.equals(place.name, ignoreCase = true) }) return
+        update { current -> current.copy(places = current.places.toMutableList().apply { add(index.coerceAtMost(size), place) }) }
+        removedPlace = null
+        placeMessageIsError = false
+        placeMessage = "Restored ${place.name} on this phone."
+    }
 
     fun usePlace(place: SavedPlace, asDestination: Boolean) {
         val lat = "%.5f".format(java.util.Locale.UK, place.point.lat)
